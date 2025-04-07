@@ -2,6 +2,7 @@ import resolve from '@rollup/plugin-node-resolve';
 import commonjs from '@rollup/plugin-commonjs';
 import babel from '@rollup/plugin-babel';
 import terser from '@rollup/plugin-terser';
+import typescript from '@rollup/plugin-typescript';
 
 export default {
   input: 'src/index.ts', // 入口文件
@@ -29,7 +30,12 @@ export default {
         '@babel/preset-env',
         '@babel/preset-typescript'
       ]
-    })
+    }),
+    typescript({
+      tsconfig: './tsconfig.json',
+      declaration: true,
+      declarationDir: './dist',
+    }),
   ],
   external: ['axios', 'spark-md5']
 };

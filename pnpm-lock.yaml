@@ -4,9 +4,6 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
-overrides:
-  big-file-uploader: 'link:'
-
 importers:
 
   .:
@@ -14,9 +11,6 @@ importers:
       axios:
         specifier: ^1.8.4
         version: 1.8.4
-      big-file-uploader:
-        specifier: 'link:'
-        version: 'link:'
       spark-md5:
         specifier: ^3.0.2
         version: 3.0.2

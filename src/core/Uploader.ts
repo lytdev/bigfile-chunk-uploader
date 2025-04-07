@@ -1,15 +1,7 @@
 import ChunkManager from './ChunkManager';
 import NetworkClient from './NetworkClient';
 import ConcurrentStrategy from '../strategies/ConcurrentStrategy';
-
-interface UploaderOptions {
-  url: string;
-  chunkSize?: number;
-  maxConcurrent?: number;
-  headers?: Record<string, string>;
-  onProgress?: (progress: number) => void;
-}
-
+import { UploaderOptions } from 'src/types';
 class BigFileUploader {
   private chunkManager?: ChunkManager;
   private networkClient: NetworkClient;
@@ -17,9 +9,10 @@ class BigFileUploader {
   private onProgress?: (progress: number) => void;
 
   constructor(options: UploaderOptions) {
-    console.log('BigFileUploader initialized with options:');
+    console.log('yes!')
+    console.log('测试输出')
     this.networkClient = new NetworkClient({
-      url: options.url,
+      baseURL: options.url,
       headers: options.headers
     });
 
