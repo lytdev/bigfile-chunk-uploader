@@ -17,6 +17,7 @@ class BigFileUploader {
   private onProgress?: (progress: number) => void;
 
   constructor(options: UploaderOptions) {
+    console.log('BigFileUploader initialized with options:');
     this.networkClient = new NetworkClient({
       url: options.url,
       headers: options.headers
