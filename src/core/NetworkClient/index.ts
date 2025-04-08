@@ -1,7 +1,7 @@
 import axios, { AxiosInstance, AxiosResponse, InternalAxiosRequestConfig } from 'axios';
 
 interface NetworkClientOptions {
-  baseURL: string;
+  url: string;
   headers?: Record<string, string>;
 }
 
@@ -15,7 +15,7 @@ class NetworkClient {
 
   constructor(options: NetworkClientOptions) {
     this.instance = axios.create({
-      baseURL: options.baseURL,
+      url: options.url,
       headers: {
         'Content-Type': 'multipart/form-data',
         ...options.headers
@@ -93,6 +93,7 @@ class NetworkClient {
   private _handleResponseError(error: any): Promise<never> {
     if (axios.isCancel(error)) {
       // 请求被取消的特殊处理
+
       return Promise.reject(new Error('Request canceled'));
     }
 

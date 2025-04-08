@@ -42,6 +42,9 @@ importers:
       '@types/jest':
         specifier: ^29.5.14
         version: 29.5.14
+      '@types/spark-md5':
+        specifier: ^3.0.5
+        version: 3.0.5
       jest:
         specifier: ^29.7.0
         version: 29.7.0(@types/node@22.14.0)
@@ -847,6 +850,9 @@ packages:
 
   '@types/resolve@1.20.2':
     resolution: {integrity: sha512-60BCwRFOZCQhDncwQdxxeOEEkbc5dIMccYLwbxsS4TUNeVECQ/pBJ0j09mrHOl/JJvpRPGwO9SvE4nR2Nb/a4Q==}
+
+  '@types/spark-md5@3.0.5':
+    resolution: {integrity: sha512-lWf05dnD42DLVKQJZrDHtWFidcLrHuip01CtnC2/S6AMhX4t9ZlEUj4iuRlAnts0PQk7KESOqKxeGE/b6sIPGg==}
 
   '@types/stack-utils@2.0.3':
     resolution: {integrity: sha512-9aEbYZ3TbYMznPdcdr3SmIrLXwC/AKZXQeCf9Pgao5CKb8CyHuEX5jzWPTkvregvhRJHcpRO6BFoGW9ycaOkYw==}
@@ -2922,6 +2928,8 @@ snapshots:
       undici-types: 6.21.0
 
   '@types/resolve@1.20.2': {}
+
+  '@types/spark-md5@3.0.5': {}
 
   '@types/stack-utils@2.0.3': {}
 
