@@ -1,22 +1,8 @@
-import { UploadStrategy } from '../types';
+import { UploadStrategy, ConcurrentStrategyOptions, ChunkInfo } from '../types';
 import ChunkManager from '../core/ChunkManager';
 import NetworkClient from '../core/NetworkClient';
 
-interface ConcurrentStrategyOptions {
-  file: File;
-  url: string;
-  chunkSize: number;
-  concurrent: number;
-  headers: Record<string, string>;
-  withCredentials: boolean;
-  maxRetries: number;
-  onProgress: (progress: number) => void;
-  onError: (error: Error) => void;
-  onSuccess: (response: any) => void;
-  onChunkSuccess: (chunkIndex: number, response: any) => void;
-}
-
-export default class ConcurrentStrategy implements UploadStrategy {
+class ConcurrentStrategy implements UploadStrategy {
   private chunkManager: ChunkManager;
   private networkClient: NetworkClient;
   private options: ConcurrentStrategyOptions;
@@ -24,6 +10,9 @@ export default class ConcurrentStrategy implements UploadStrategy {
   private paused = false;
   private aborted = false;
   private abortController: AbortController | null = null;
+  private pendingChunks: ChunkInfo[] = [];
+  private retryQueue: ChunkInfo[] = [];
+
 
   constructor(options: ConcurrentStrategyOptions) {
     this.options = options;
@@ -34,97 +23,293 @@ export default class ConcurrentStrategy implements UploadStrategy {
     });
   }
 
+  /**
+   * 执行上传流程
+   */
   async execute(): Promise<void> {
+    if (this.aborted) {
+      throw new Error('Upload has been aborted');
+    }
+
     this.abortController = new AbortController();
 
     try {
       // 1. 计算文件哈希
-      await this.chunkManager.calculateFileHash(this.options.onProgress);
+      await this.calculateFileHashWithProgress();
 
-      // 2. 初始化上传
-      const initResponse = await this.networkClient.initUpload(this.options.url, {
-        fileName: this.options.file.name,
-        fileSize: this.options.file.size,
-        chunkSize: this.options.chunkSize,
-        fileHash: this.chunkManager.fileHash
-      });
+      // 2. 初始化上传会话
+      const uploadId = await this.initUploadSession();
 
-      // 3. 上传分片
-      await this.uploadChunks();
+      // 3. 准备上传队列
+      this.prepareUploadQueue();
 
-      // 4. 合并文件
-      const mergeResponse = await this.networkClient.mergeChunks(this.options.url, {
-        fileHash: this.chunkManager.fileHash,
-        fileName: this.options.file.name
-      });
+      // 4. 开始并发上传
+      await this.processUploadQueue(uploadId);
 
-      this.options.onSuccess(mergeResponse);
+      // 5. 合并分片
+      const result = await this.completeUpload(uploadId);
+      this.options.onSuccess(result);
+
     } catch (error) {
-      if (!this.aborted) {
-        this.options.onError(error instanceof Error ? error : new Error(String(error)));
-      }
+      this.handleUploadError(error);
+    } finally {
+      this.cleanup();
     }
   }
 
   pause(): void {
     this.paused = true;
     this.abortController?.abort();
+    this.abortController = null;
   }
 
   resume(): void {
+    if (!this.paused) return;
+
     this.paused = false;
     this.abortController = new AbortController();
-    this.uploadChunks().catch(this.options.onError);
+    this.execute().catch(this.options.onError);
   }
 
   abort(): void {
     this.aborted = true;
     this.abortController?.abort();
+    this.abortController = null;
   }
 
-  private async uploadChunks(): Promise<void> {
-    const chunksToUpload = this.chunkManager.getPendingChunks();
 
-    while (chunksToUpload.length > 0 && !this.paused && !this.aborted) {
-      if (this.activeConnections >= this.options.concurrent) {
-        await new Promise(resolve => setTimeout(resolve, 100));
-        continue;
-      }
-
-      const chunk = chunksToUpload.shift()!;
-      this.activeConnections++;
-      this.chunkManager.updateChunkStatus(chunk.index, 'uploading');
-
-      try {
-        const formData = new FormData();
-        formData.append('file', chunk.blob);
-        formData.append('chunkIndex', String(chunk.index));
-        formData.append('fileHash', this.chunkManager.fileHash!);
-
-        const response = await this.networkClient.uploadChunk(this.options.url, formData, {
-          signal: this.abortController?.signal,
-          onProgress: (progress: number) => {
-            // 计算整体进度
-            const overallProgress = this.chunkManager.getProgress();
-            this.options.onProgress(overallProgress);
-          }
-        });
-
-        this.chunkManager.updateChunkStatus(chunk.index, 'completed');
-        this.options.onChunkSuccess(chunk.index, response);
-      } catch (error) {
-        if (this.aborted) return;
-
-        this.chunkManager.updateChunkStatus(chunk.index, 'failed');
-        if (chunk.retries < this.options.maxRetries) {
-          chunksToUpload.push(chunk); // 重试
-        } else {
-          throw error;
-        }
-      } finally {
-        this.activeConnections--;
-        this.options.onProgress(this.chunkManager.getProgress());
-      }
+  /**
+   * 带进度回调的文件哈希计算
+   */
+  private async calculateFileHashWithProgress(): Promise<void> {
+    try {
+      await this.chunkManager.calculateFileHash((progress) => {
+        // 哈希计算占总体进度的20%
+        const overallProgress = Math.floor(progress * 0.2);
+        this.options.onProgress(overallProgress);
+      });
+    } catch (error) {
+      throw new Error(`File hash calculation failed: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
+
+  /**
+   * 初始化上传会话
+   */
+  private async initUploadSession(): Promise<string> {
+    try {
+      const response = await this.networkClient.initUpload(this.options.url, {
+        fileName: this.options.file.name,
+        fileSize: this.options.file.size,
+        chunkSize: this.options.chunkSize,
+        fileHash: this.chunkManager.fileHash!
+      });
+
+      if (!response.uploadId) {
+        throw new Error('Server did not return upload ID');
+      }
+
+      return response.uploadId;
+    } catch (error) {
+      throw new Error(`Upload initialization failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /**
+   * 准备上传队列
+   */
+  private prepareUploadQueue(): void {
+    // 获取未完成的分片（排除已完成的）
+    const completedIndices = this.chunkManager.getCompletedIndices();
+    this.pendingChunks = this.chunkManager.getPendingChunks(completedIndices);
+
+    // 添加需要重试的分片
+    const chunksToRetry = this.chunkManager.getChunksToRetry(this.options.maxRetries);
+    this.pendingChunks.push(...chunksToRetry);
+
+    // 更新进度（初始化后可能有已完成的分片）
+    this.updateProgress();
+  }
+
+  /**
+   * 处理上传队列
+   */
+  private async processUploadQueue(uploadId: string): Promise<void> {
+    while (this.shouldContinueProcessing()) {
+      if (this.canStartNewConnection()) {
+        const chunk = this.getNextChunk();
+        if (chunk) {
+          this.startChunkUpload(chunk, uploadId);
+        }
+      }
+
+      // 避免阻塞事件循环
+      await this.delay(50);
+    }
+
+    // 等待所有活跃连接完成
+    await this.waitForActiveConnections();
+  }
+
+  /**
+   * 启动分片上传
+   */
+  private async startChunkUpload(chunk: ChunkInfo, uploadId: string): Promise<void> {
+    this.activeConnections++;
+    this.chunkManager.updateChunkStatus(chunk.index, 'uploading');
+
+    try {
+      const formData = this.createFormData(chunk, uploadId);
+
+      const response = await this.networkClient.uploadChunk(this.options.url, formData, {
+        signal: this.abortController?.signal,
+        onProgress: (chunkProgress) => {
+          this.updateChunkProgress(chunk.index, chunkProgress);
+        }
+      });
+
+      this.handleChunkSuccess(chunk.index, response);
+    } catch (error) {
+      this.handleChunkError(chunk, error);
+    } finally {
+      this.activeConnections--;
+      this.updateProgress();
+    }
+  }
+
+  /**
+   * 创建分片FormData
+   */
+  private createFormData(chunk: ChunkInfo, uploadId: string): FormData {
+    const formData = new FormData();
+    formData.append('file', chunk.blob);
+    formData.append('chunkIndex', String(chunk.index));
+    formData.append('fileHash', this.chunkManager.fileHash!);
+    formData.append('uploadId', uploadId);
+    return formData;
+  }
+
+  /**
+   * 完成上传（合并分片）
+   */
+  private async completeUpload(uploadId: string): Promise<any> {
+    try {
+      return await this.networkClient.mergeChunks(this.options.url, {
+        uploadId,
+        fileHash: this.chunkManager.fileHash!,
+        fileName: this.options.file.name,
+        totalChunks: this.chunkManager.chunks.length
+      });
+    } catch (error) {
+      throw new Error(`File merge failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /**
+   * 处理上传错误
+   */
+  private handleUploadError(error: unknown): void {
+    if (this.aborted) return;
+
+    const errorMessage = error instanceof Error ? error.message : 'Unknown upload error';
+    this.options.onError(new Error(errorMessage));
+  }
+
+  /**
+   * 处理分片上传成功
+   */
+  private handleChunkSuccess(chunkIndex: number, response: any): void {
+    this.chunkManager.updateChunkStatus(chunkIndex, 'completed');
+    this.options.onChunkSuccess(chunkIndex, response);
+  }
+
+  /**
+   * 处理分片上传失败
+   */
+  private handleChunkError(chunk: ChunkInfo, error: unknown): void {
+    if (this.aborted) return;
+
+    this.chunkManager.updateChunkStatus(chunk.index, 'failed');
+
+    if (chunk.retries < this.options.maxRetries) {
+      this.retryQueue.push(chunk); // 加入重试队列
+    } else {
+      console.error(`Chunk ${chunk.index} failed after ${this.options.maxRetries} retries`);
+    }
+  }
+
+  /**
+   * 更新分片上传进度
+   */
+  private updateChunkProgress(chunkIndex: number, chunkProgress: number): void {
+    // 计算单个分片对整体进度的影响
+    const chunkWeight = 80 / this.chunkManager.chunks.length; // 上传占总体进度的80%
+    const progressFromChunks = this.chunkManager.getProgress() * chunkWeight;
+    const progressFromThisChunk = chunkProgress * chunkWeight / 100;
+    const overallProgress = 20 + progressFromChunks + progressFromThisChunk; // 哈希计算占20%
+
+    this.options.onProgress(Math.min(100, Math.floor(overallProgress)));
+  }
+
+  /**
+   * 更新整体进度
+   */
+  private updateProgress(): void {
+    const progressFromChunks = this.chunkManager.getProgress() * 0.8;
+    const overallProgress = 20 + progressFromChunks; // 哈希计算占20%
+    this.options.onProgress(Math.floor(overallProgress));
+  }
+
+  /**
+   * 清理资源
+   */
+  private cleanup(): void {
+    this.abortController = null;
+    this.pendingChunks = [];
+    this.retryQueue = [];
+  }
+
+  /**
+   * 辅助方法：获取下一个分片
+   */
+  private getNextChunk(): ChunkInfo | undefined {
+    return this.retryQueue.shift() || this.pendingChunks.shift();
+  }
+
+  /**
+   * 辅助方法：检查是否可以启动新连接
+   */
+  private canStartNewConnection(): boolean {
+    return this.activeConnections < this.options.concurrent &&
+      (this.pendingChunks.length > 0 || this.retryQueue.length > 0);
+  }
+
+  /**
+   * 辅助方法：是否应该继续处理
+   */
+  private shouldContinueProcessing(): boolean {
+    return !this.paused &&
+      !this.aborted &&
+      (this.pendingChunks.length > 0 ||
+        this.retryQueue.length > 0 ||
+        this.activeConnections > 0);
+  }
+
+  /**
+   * 辅助方法：等待活跃连接完成
+   */
+  private async waitForActiveConnections(): Promise<void> {
+    while (this.activeConnections > 0 && !this.aborted) {
+      await this.delay(100);
+    }
+  }
+
+  /**
+   * 辅助方法：延迟
+   */
+  private delay(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
 }
+
+export default ConcurrentStrategy;

@@ -1,7 +1,6 @@
-import ChunkManager from './ChunkManager';
-import NetworkClient from './NetworkClient';
 import ConcurrentStrategy from '../strategies/ConcurrentStrategy';
 import { UploadOptions, UploadStrategy } from 'src/types';
+import { DEFAULT_CHUNK_SIZE, DEFAULT_CONCURRENT, DEFAULT_MAX_RETRIES } from 'src/constants';
 
 class BigFileUploader {
   private file: File;
@@ -21,11 +20,11 @@ class BigFileUploader {
   constructor(options: UploadOptions) {
     this.file = options.file;
     this.url = options.url;
-    this.chunkSize = options.chunkSize || 5 * 1024 * 1024; // 默认5MB
-    this.concurrent = options.concurrent || 3;
+    this.chunkSize = options.chunkSize || DEFAULT_CHUNK_SIZE; // 默认5MB
+    this.concurrent = options.concurrent || DEFAULT_CONCURRENT;
     this.headers = options.headers || {};
     this.withCredentials = options.withCredentials || false;
-    this.maxRetries = options.maxRetries || 3;
+    this.maxRetries = options.maxRetries || DEFAULT_MAX_RETRIES;
     this.onProgress = options.onProgress || (() => { });
     this.onError = options.onError || (() => { });
     this.onSuccess = options.onSuccess || (() => { });

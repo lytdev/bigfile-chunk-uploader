@@ -1,19 +1,11 @@
 //TODO: 创建一个用于计算哈希的 Web Worker
 import SparkMD5 from 'spark-md5';
-
-interface Chunk {
-  index: number;
-  start: number;
-  end: number;
-  blob: Blob;
-  status: 'pending' | 'uploading' | 'completed' | 'failed';
-  retries: number;
-}
+import { ChunkInfo } from 'src/types';
 
 export default class ChunkManager {
   private file: File;
   private chunkSize: number;
-  private chunks: Chunk[];
+  public chunks: ChunkInfo[];
   public fileHash: string | null;
   private hashProgress: number;
 
@@ -85,7 +77,7 @@ export default class ChunkManager {
     });
   }
 
-  getPendingChunks(excludeIndices: number[] = []): Chunk[] {
+  getPendingChunks(excludeIndices: number[] = []): ChunkInfo[] {
     return this.chunks.filter(chunk =>
       chunk.status === 'pending' && !excludeIndices.includes(chunk.index)
     );
@@ -97,7 +89,7 @@ export default class ChunkManager {
       .map(chunk => chunk.index);
   }
 
-  updateChunkStatus(index: number, status: Chunk['status']): void {
+  updateChunkStatus(index: number, status: ChunkInfo['status']): void {
     const chunk = this.chunks.find(c => c.index === index);
     if (chunk) {
       chunk.status = status;
@@ -107,7 +99,7 @@ export default class ChunkManager {
     }
   }
 
-  resetChunks(indices: number[], status: Chunk['status'] = 'pending'): void {
+  resetChunks(indices: number[], status: ChunkInfo['status'] = 'pending'): void {
     this.chunks
       .filter(chunk => indices.includes(chunk.index))
       .forEach(chunk => {
@@ -116,7 +108,7 @@ export default class ChunkManager {
       });
   }
 
-  getChunksToRetry(maxRetries: number = 3): Chunk[] {
+  getChunksToRetry(maxRetries: number = 3): ChunkInfo[] {
     return this.chunks.filter(
       chunk => chunk.status === 'failed' && chunk.retries < maxRetries
     );

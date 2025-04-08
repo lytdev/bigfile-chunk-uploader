@@ -1,15 +1,45 @@
-// 上传配置类型
+/** 上传配置选项 */
 export interface UploadOptions {
+  /** 要上传的文件对象 */
   file: File;
+
+  /** 上传接口的 URL 地址 */
   url: string;
+
+  /** 分片大小(字节)，默认 5MB */
   chunkSize?: number;
+
+  /** 最大并发上传数，默认 3 */
   concurrent?: number;
+
+  /** 自定义请求头 */
   headers?: Record<string, string>;
+
+  /** 是否携带 cookie，默认 false */
   withCredentials?: boolean;
+
+  /** 单个分片最大重试次数，默认 3 次 */
   maxRetries?: number;
+
+  /** 上传进度回调 
+   * @param progress 上传进度(0-100)
+   */
   onProgress?: (progress: number) => void;
+
+  /** 上传失败回调
+   * @param error 错误对象
+   */
   onError?: (error: Error) => void;
+
+  /** 上传成功回调
+   * @param response 服务器响应数据
+   */
   onSuccess?: (response: any) => void;
+
+  /** 分片上传成功回调
+   * @param chunkIndex 分片索引
+   * @param response 服务器响应数据
+   */
   onChunkSuccess?: (chunkIndex: number, response: any) => void;
 }
 
@@ -26,10 +56,74 @@ export interface ChunkInfo {
   retries: number;
 }
 
-// 上传策略接口
+/** 上传策略接口
+ * @description 定义了文件上传的核心行为
+ */
 export interface UploadStrategy {
+  /** 执行上传操作
+   * @returns 返回一个 Promise，上传完成时解析
+   */
   execute(): Promise<void>;
+
+  /** 暂停上传
+   * @description 暂停当前上传操作，可以通过 resume 恢复
+   */
   pause(): void;
+
+  /** 恢复上传
+   * @description 恢复之前暂停的上传操作
+   */
   resume(): void;
+
+  /** 中止上传
+   * @description 完全中止上传操作，不可恢复
+   */
   abort(): void;
+}
+
+/** 并发上传策略配置选项
+ * @description 控制文件分片的并发上传行为
+ */
+export interface ConcurrentStrategyOptions {
+  /** 要上传的文件对象 */
+  file: File;
+
+  /** 上传接口的 URL 地址 */
+  url: string;
+
+  /** 分片大小(字节) */
+  chunkSize: number;
+
+  /** 最大并发上传数 */
+  concurrent: number;
+
+  /** 自定义请求头 */
+  headers: Record<string, string>;
+
+  /** 是否携带 cookie */
+  withCredentials: boolean;
+
+  /** 单个分片最大重试次数 */
+  maxRetries: number;
+
+  /** 上传进度回调 
+   * @param progress 上传进度(0-100)
+   */
+  onProgress: (progress: number) => void;
+
+  /** 上传失败回调
+   * @param error 错误对象
+   */
+  onError: (error: Error) => void;
+
+  /** 上传成功回调
+   * @param response 服务器响应数据
+   */
+  onSuccess: (response: any) => void;
+
+  /** 分片上传成功回调
+   * @param chunkIndex 分片索引
+   * @param response 服务器响应数据
+   */
+  onChunkSuccess: (chunkIndex: number, response: any) => void;
 }
