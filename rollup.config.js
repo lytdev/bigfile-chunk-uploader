@@ -4,6 +4,8 @@ import babel from '@rollup/plugin-babel';
 import terser from '@rollup/plugin-terser';
 import typescript from '@rollup/plugin-typescript';
 
+const isProd = process.env.NODE_ENV === 'production';
+
 export default {
   input: 'src/index.ts', // 入口文件
   output: [
@@ -11,12 +13,14 @@ export default {
       file: 'dist/index.js',
       format: 'umd',
       name: 'BigFileUploader',
-      plugins: [terser()]
+      sourcemap: !isProd, // 开发环境启用 sourcemap
+      plugins: isProd ? [terser()] : []
     },
     {
       file: 'dist/index.esm.js',
       format: 'esm',
-      plugins: [terser()]
+      sourcemap: !isProd,
+      plugins: isProd ? [terser()] : []
     }
   ],
   plugins: [
@@ -35,6 +39,8 @@ export default {
       tsconfig: './tsconfig.json',
       declaration: true,
       declarationDir: './dist',
+      sourceMap: !isProd, // 开发环境启用 sourceMap
+      inlineSources: !isProd // 开发环境内联源码
     }),
   ],
   external: ['axios', 'spark-md5']
