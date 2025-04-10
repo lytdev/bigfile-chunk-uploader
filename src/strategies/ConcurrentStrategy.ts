@@ -98,7 +98,8 @@ class ConcurrentStrategy implements UploadStrategy {
    */
   private async initUploadSession(): Promise<string> {
     try {
-      const response = await this.networkClient.initUpload(this.options.url, {
+
+      const response = await this.networkClient.initUpload(`${this.options.url}/init`, {
         fileName: this.options.file.name,
         fileSize: this.options.file.size,
         chunkSize: this.options.chunkSize,
@@ -106,7 +107,12 @@ class ConcurrentStrategy implements UploadStrategy {
       });
 
       if (!response.uploadId) {
-        throw new Error('Server did not return upload ID');
+        // 处理重复上传
+        let errorMessage = 'Server did not return upload ID';
+        if (response.message === '文件已存在，无需重复上传') {
+          errorMessage = response.message;
+        }
+        throw new Error(errorMessage);
       }
 
       return response.uploadId;
@@ -194,7 +200,7 @@ class ConcurrentStrategy implements UploadStrategy {
    */
   private async completeUpload(uploadId: string): Promise<any> {
     try {
-      return await this.networkClient.mergeChunks(this.options.url, {
+      return await this.networkClient.mergeChunks(`${this.options.url}/merge`, {
         uploadId,
         fileHash: this.chunkManager.fileHash!,
         fileName: this.options.file.name,

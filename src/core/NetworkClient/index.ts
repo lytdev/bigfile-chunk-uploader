@@ -42,6 +42,9 @@ class NetworkClient {
    */
   public async uploadChunk(url: string, formData: FormData, options: UploadOptions = {}): Promise<any> {
     return this.instance.post(url, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
       onUploadProgress: options.onProgress,
       signal: options.signal
     });

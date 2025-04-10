@@ -30,7 +30,6 @@
     "@rollup/plugin-terser": "^0.4.4",
     "@rollup/plugin-typescript": "^12.1.2",
     "@types/jest": "^29.5.14",
-    "@types/spark-md5": "^3.0.5",
     "cross-env": "^7.0.3",
     "jest": "^29.7.0",
     "rollup": "^2.79.2",
@@ -38,7 +37,6 @@
     "typescript": "^5.8.3"
   },
   "dependencies": {
-    "axios": "^1.8.4",
-    "spark-md5": "^3.0.2"
+    "axios": "^1.8.4"
   }
 }

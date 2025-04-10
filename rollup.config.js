@@ -43,5 +43,5 @@ export default {
       inlineSources: !isProd // 开发环境内联源码
     }),
   ],
-  external: ['axios', 'spark-md5']
+  external: ['axios']
 };

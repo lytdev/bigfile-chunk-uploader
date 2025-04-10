@@ -1,5 +1,4 @@
 //TODO: 创建一个用于计算哈希的 Web Worker
-import SparkMD5 from 'spark-md5';
 import { ChunkInfo } from 'src/types';
 
 export default class ChunkManager {
@@ -42,15 +41,14 @@ export default class ChunkManager {
     if (this.fileHash) return this.fileHash;
 
     return new Promise((resolve) => {
-      const spark = new SparkMD5.ArrayBuffer();
-      const fileReader = new FileReader();
-      const chunkSize = 2 * 1024 * 1024;
       let currentChunk = 0;
-      const chunks = Math.ceil(this.file.size / chunkSize);
+      const fileReader = new FileReader();
+      const chunks = Math.ceil(this.file.size / this.chunkSize);
+      const buffers: ArrayBuffer[] = [];
 
-      fileReader.onload = (e: ProgressEvent<FileReader>) => {
+      fileReader.onload = async (e: ProgressEvent<FileReader>) => {
         if (e.target?.result instanceof ArrayBuffer) {
-          spark.append(e.target.result);
+          buffers.push(e.target.result);
           currentChunk++;
           this.hashProgress = Math.round((currentChunk / chunks) * 100);
 
@@ -61,15 +59,27 @@ export default class ChunkManager {
           if (currentChunk < chunks) {
             loadNextChunk();
           } else {
-            this.fileHash = spark.end();
+            // 合并所有缓冲区
+            const concatenated = new Uint8Array(buffers.reduce((acc, buf) => acc + buf.byteLength, 0));
+            let offset = 0;
+            buffers.forEach(buffer => {
+              concatenated.set(new Uint8Array(buffer), offset);
+              offset += buffer.byteLength;
+            });
+
+            // 使用 SHA-256 计算哈希
+            const hashBuffer = await crypto.subtle.digest('SHA-256', concatenated);
+            const hashArray = Array.from(new Uint8Array(hashBuffer));
+            this.fileHash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+
             resolve(this.fileHash);
           }
         }
       };
 
       const loadNextChunk = () => {
-        const start = currentChunk * chunkSize;
-        const end = Math.min(start + chunkSize, this.file.size);
+        const start = currentChunk * this.chunkSize;
+        const end = Math.min(start + this.chunkSize, this.file.size);
         fileReader.readAsArrayBuffer(this.file.slice(start, end));
       };
 
