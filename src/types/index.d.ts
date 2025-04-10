@@ -173,4 +173,5 @@ interface NetworkClientOptions {
   endpoints?: EndpointConfig;
   headers?: Record<string, string>;
   withCredentials?: boolean;
+  timeout?: number;
 }

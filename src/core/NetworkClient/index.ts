@@ -25,8 +25,8 @@ class NetworkClient {
         'Content-Type': 'multipart/form-data',
         ...options.headers
       },
-      withCredentials: true,
-      timeout: 30000
+      withCredentials: options.withCredentials || false,
+      timeout: options.timeout || 30000,
     });
 
     // 请求拦截器
