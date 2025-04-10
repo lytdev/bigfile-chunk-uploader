@@ -1,10 +1,41 @@
+/** API 端点配置
+ * @description 定义上传相关的 API 端点
+ */
+export interface EndpointConfig {
+  /** 初始化上传端点
+   * @description 用于创建上传会话和验证文件
+   * @default '/upload/init'
+   */
+  init?: string;
+
+  /** 分片上传端点
+   * @description 用于上传单个文件分片
+   * @default '/upload/chunk'
+   */
+  chunk?: string;
+
+  /** 合并分片端点
+   * @description 用于请求服务器合并已上传的分片
+   * @default '/upload/merge'
+   */
+  merge?: string;
+
+  /** 文件验证端点
+   * @description 用于验证文件是否已存在
+   * @default '/upload/verify'
+   */
+  verify?: string;
+}
 /** 上传配置选项 */
 export interface UploadOptions {
   /** 要上传的文件对象 */
   file: File;
 
-  /** 上传接口的 URL 地址 */
-  url: string;
+  /** 基础 URL */
+  baseURL: string;
+
+  /** API 端点配置 */
+  endpoints?: EndpointConfig;
 
   /** 分片大小(字节)，默认 5MB */
   chunkSize?: number;
@@ -41,6 +72,12 @@ export interface UploadOptions {
    * @param response 服务器响应数据
    */
   onChunkSuccess?: (chunkIndex: number, response: any) => void;
+}
+
+interface UploadResponse {
+  uploadId?: string;
+  message?: string;
+  [key: string]: any;
 }
 
 // 分片状态类型
@@ -88,8 +125,11 @@ export interface ConcurrentStrategyOptions {
   /** 要上传的文件对象 */
   file: File;
 
-  /** 上传接口的 URL 地址 */
-  url: string;
+  /** 基础 URL */
+  baseURL: string;
+
+  /** API 端点配置 */
+  endpoints?: EndpointConfig;
 
   /** 分片大小(字节) */
   chunkSize: number;
@@ -126,4 +166,11 @@ export interface ConcurrentStrategyOptions {
    * @param response 服务器响应数据
    */
   onChunkSuccess: (chunkIndex: number, response: any) => void;
+}
+
+interface NetworkClientOptions {
+  baseURL: string;
+  endpoints?: EndpointConfig;
+  headers?: Record<string, string>;
+  withCredentials?: boolean;
 }

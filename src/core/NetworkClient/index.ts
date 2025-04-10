@@ -1,9 +1,5 @@
 import axios, { AxiosInstance, AxiosResponse, InternalAxiosRequestConfig } from 'axios';
-
-interface NetworkClientOptions {
-  url: string;
-  headers?: Record<string, string>;
-}
+import { EndpointConfig, NetworkClientOptions } from 'src/types';
 
 interface UploadOptions {
   onProgress?: (progressEvent: any) => void;
@@ -12,10 +8,19 @@ interface UploadOptions {
 
 class NetworkClient {
   private instance: AxiosInstance;
+  private endpoints: Required<EndpointConfig>;
 
   constructor(options: NetworkClientOptions) {
+    const defaultEndpoints: Required<EndpointConfig> = {
+      init: '/upload/init',
+      chunk: '/upload/chunk',
+      merge: '/upload/merge',
+      verify: '/upload/verify'
+    };
+
+    this.endpoints = { ...defaultEndpoints, ...options.endpoints };
     this.instance = axios.create({
-      url: options.url,
+      baseURL: options.baseURL,
       headers: {
         'Content-Type': 'multipart/form-data',
         ...options.headers
@@ -37,11 +42,15 @@ class NetworkClient {
     );
   }
 
+  private getFullUrl(endpoint: keyof EndpointConfig): string {
+    return this.endpoints[endpoint];
+  }
+
   /**
    * 上传分片
    */
-  public async uploadChunk(url: string, formData: FormData, options: UploadOptions = {}): Promise<any> {
-    return this.instance.post(url, formData, {
+  public async uploadChunk(formData: FormData, options: UploadOptions = {}): Promise<any> {
+    return this.instance.post(this.getFullUrl('chunk'), formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
@@ -53,8 +62,8 @@ class NetworkClient {
   /**
    * 初始化上传
    */
-  public async initUpload(url: string, data: Record<string, any>): Promise<any> {
-    return this.instance.post(url, data, {
+  public async initUpload(data: Record<string, any>): Promise<any> {
+    return this.instance.post(this.getFullUrl('init'), data, {
       headers: {
         'Content-Type': 'application/json'
       }
@@ -64,8 +73,8 @@ class NetworkClient {
   /**
    * 合并分片
    */
-  public async mergeChunks(url: string, data: Record<string, any>): Promise<any> {
-    return this.instance.post(url, data, {
+  public async mergeChunks(data: Record<string, any>): Promise<any> {
+    return this.instance.post(this.getFullUrl('merge'), data, {
       headers: {
         'Content-Type': 'application/json'
       }

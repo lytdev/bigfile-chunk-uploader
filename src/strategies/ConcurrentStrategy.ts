@@ -1,4 +1,4 @@
-import { UploadStrategy, ConcurrentStrategyOptions, ChunkInfo } from '../types';
+import { UploadStrategy, ConcurrentStrategyOptions, ChunkInfo, UploadResponse } from '../types';
 import ChunkManager from '../core/ChunkManager';
 import NetworkClient from '../core/NetworkClient';
 
@@ -13,13 +13,16 @@ class ConcurrentStrategy implements UploadStrategy {
   private pendingChunks: ChunkInfo[] = [];
   private retryQueue: ChunkInfo[] = [];
 
-
   constructor(options: ConcurrentStrategyOptions) {
     this.options = options;
     this.chunkManager = new ChunkManager(options.file, options.chunkSize);
     this.networkClient = new NetworkClient({
-      url: options.url,
+      baseURL: options.baseURL,
+      endpoints: options.endpoints,
       headers: options.headers,
+      // TODO 重试次数
+      // TODO 加 withCredentials
+      withCredentials: options.withCredentials
     });
   }
 
@@ -38,7 +41,21 @@ class ConcurrentStrategy implements UploadStrategy {
       await this.calculateFileHashWithProgress();
 
       // 2. 初始化上传会话
-      const uploadId = await this.initUploadSession();
+      const initResult = await this.initUploadSession();
+
+      // 如果文件已存在，直接返回成功
+      if ('exists' in initResult && initResult.exists) {
+        this.options.onProgress(100);
+        this.options.onSuccess(initResult);
+        return;
+      }
+
+      // 检查 uploadId 是否存在
+      if (!initResult.uploadId) {
+        throw new Error('Missing uploadId in server response');
+      }
+
+      const uploadId = initResult.uploadId;
 
       // 3. 准备上传队列
       this.prepareUploadQueue();
@@ -89,6 +106,8 @@ class ConcurrentStrategy implements UploadStrategy {
         this.options.onProgress(overallProgress);
       });
     } catch (error) {
+      // 发生错误时重置进度为0
+      this.options.onProgress(0);
       throw new Error(`File hash calculation failed: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
@@ -96,26 +115,15 @@ class ConcurrentStrategy implements UploadStrategy {
   /**
    * 初始化上传会话
    */
-  private async initUploadSession(): Promise<string> {
+  private async initUploadSession(): Promise<UploadResponse> {
     try {
-
-      const response = await this.networkClient.initUpload(`${this.options.url}/init`, {
+      return await this.networkClient.initUpload({
         fileName: this.options.file.name,
         fileSize: this.options.file.size,
         chunkSize: this.options.chunkSize,
         fileHash: this.chunkManager.fileHash!
       });
 
-      if (!response.uploadId) {
-        // 处理重复上传
-        let errorMessage = 'Server did not return upload ID';
-        if (response.message === '文件已存在，无需重复上传') {
-          errorMessage = response.message;
-        }
-        throw new Error(errorMessage);
-      }
-
-      return response.uploadId;
     } catch (error) {
       throw new Error(`Upload initialization failed: ${error instanceof Error ? error.message : String(error)}`);
     }
@@ -167,7 +175,7 @@ class ConcurrentStrategy implements UploadStrategy {
     try {
       const formData = this.createFormData(chunk, uploadId);
 
-      const response = await this.networkClient.uploadChunk(this.options.url, formData, {
+      const response = await this.networkClient.uploadChunk(formData, {
         signal: this.abortController?.signal,
         onProgress: (chunkProgress) => {
           this.updateChunkProgress(chunk.index, chunkProgress);
@@ -200,7 +208,7 @@ class ConcurrentStrategy implements UploadStrategy {
    */
   private async completeUpload(uploadId: string): Promise<any> {
     try {
-      return await this.networkClient.mergeChunks(`${this.options.url}/merge`, {
+      return await this.networkClient.mergeChunks({
         uploadId,
         fileHash: this.chunkManager.fileHash!,
         fileName: this.options.file.name,
@@ -261,6 +269,12 @@ class ConcurrentStrategy implements UploadStrategy {
    * 更新整体进度
    */
   private updateProgress(): void {
+    if (!this.chunkManager.fileHash) {
+      // 如果没有哈希值，说明哈希计算失败或未完成，进度应该为0
+      this.options.onProgress(0);
+      return;
+    }
+
     const progressFromChunks = this.chunkManager.getProgress() * 0.8;
     const overallProgress = 20 + progressFromChunks; // 哈希计算占20%
     this.options.onProgress(Math.floor(overallProgress));

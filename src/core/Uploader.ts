@@ -1,10 +1,11 @@
 import ConcurrentStrategy from '../strategies/ConcurrentStrategy';
-import { UploadOptions, UploadStrategy } from 'src/types';
+import { EndpointConfig, UploadOptions, UploadStrategy } from 'src/types';
 import { DEFAULT_CHUNK_SIZE, DEFAULT_CONCURRENT, DEFAULT_MAX_RETRIES } from 'src/constants';
 
 class BigFileUploader {
   private file: File;
-  private url: string;
+  private baseURL: string;
+  private endpoints: Required<EndpointConfig>;
   private chunkSize: number;
   private concurrent: number;
   private headers: Record<string, string>;
@@ -19,7 +20,15 @@ class BigFileUploader {
 
   constructor(options: UploadOptions) {
     this.file = options.file;
-    this.url = options.url;
+    this.baseURL = options.baseURL;
+    // 初始化端点配置
+    const defaultEndpoints: Required<EndpointConfig> = {
+      init: '/upload/init',
+      chunk: '/upload/chunk',
+      merge: '/upload/merge',
+      verify: '/upload/verify'
+    };
+    this.endpoints = { ...defaultEndpoints, ...options.endpoints };
     this.chunkSize = options.chunkSize || DEFAULT_CHUNK_SIZE; // 默认5MB
     this.concurrent = options.concurrent || DEFAULT_CONCURRENT;
     this.headers = options.headers || {};
@@ -80,7 +89,8 @@ class BigFileUploader {
   private createStrategy(): UploadStrategy {
     return new ConcurrentStrategy({
       file: this.file,
-      url: this.url,
+      baseURL: this.baseURL,
+      endpoints: this.endpoints,
       chunkSize: this.chunkSize,
       concurrent: this.concurrent,
       headers: this.headers,
