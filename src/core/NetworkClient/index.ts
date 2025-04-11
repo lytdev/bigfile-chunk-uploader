@@ -1,5 +1,6 @@
 import axios, { AxiosInstance, AxiosResponse, InternalAxiosRequestConfig } from 'axios';
 import { EndpointConfig, NetworkClientOptions } from 'src/types';
+import { DEFAULT_ENDPOINTS, DEFAULT_TIMEOUT } from 'src/constants';
 
 interface UploadOptions {
   onProgress?: (progressEvent: any) => void;
@@ -11,14 +12,7 @@ class NetworkClient {
   private endpoints: Required<EndpointConfig>;
 
   constructor(options: NetworkClientOptions) {
-    const defaultEndpoints: Required<EndpointConfig> = {
-      init: '/upload/init',
-      chunk: '/upload/chunk',
-      merge: '/upload/merge',
-      verify: '/upload/verify'
-    };
-
-    this.endpoints = { ...defaultEndpoints, ...options.endpoints };
+    this.endpoints = { ...DEFAULT_ENDPOINTS, ...options.endpoints };
     this.instance = axios.create({
       baseURL: options.baseURL,
       headers: {
@@ -26,7 +20,7 @@ class NetworkClient {
         ...options.headers
       },
       withCredentials: options.withCredentials || false,
-      timeout: options.timeout || 30000,
+      timeout: options.timeout || DEFAULT_TIMEOUT,
     });
 
     // 请求拦截器
@@ -84,6 +78,7 @@ class NetworkClient {
   /**
    * 检查上传进度
    */
+  // TODO checkProgress 调用方
   public async checkProgress(url: string, params: Record<string, any>): Promise<any> {
     return this.instance.get(url, { params });
   }
