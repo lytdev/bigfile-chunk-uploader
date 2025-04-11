@@ -1,3 +1,4 @@
+import { AxiosRequestConfig } from 'axios';
 /** API 端点配置
  * @description 定义上传相关的 API 端点
  */
@@ -51,6 +52,9 @@ export interface UploadOptions {
 
   /** 单个分片最大重试次数，默认 3 次 */
   maxRetries?: number;
+
+  /** 请求超时时间(毫秒) */
+  timeout?: number;
 
   /** 上传进度回调 
    * @param progress 上传进度(0-100)
@@ -146,6 +150,9 @@ export interface ConcurrentStrategyOptions {
   /** 单个分片最大重试次数 */
   maxRetries: number;
 
+  /** 请求超时时间(毫秒) */
+  timeout?: number;
+
   /** 上传进度回调 
    * @param progress 上传进度(0-100)
    */
@@ -169,9 +176,20 @@ export interface ConcurrentStrategyOptions {
 }
 
 interface NetworkClientOptions {
+  maxRetries: number;
   baseURL: string;
   endpoints?: EndpointConfig;
   headers?: Record<string, string>;
   withCredentials?: boolean;
   timeout?: number;
+}
+
+/** 扩展的请求配置 */
+export interface ExtendedRequestConfig extends AxiosRequestConfig {
+  /** 重试次数 */
+  retries?: number;
+  /** 重试延迟时间(ms) */
+  retryDelay?: number;
+  /** 当前重试次数 */
+  retryCount?: number;
 }

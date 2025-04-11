@@ -20,8 +20,7 @@ class ConcurrentStrategy implements UploadStrategy {
       baseURL: options.baseURL,
       endpoints: options.endpoints,
       headers: options.headers,
-      // TODO 重试次数
-      // TODO 加 withCredentials
+      timeout: options.timeout,
       withCredentials: options.withCredentials
     });
   }
