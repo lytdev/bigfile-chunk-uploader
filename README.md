@@ -223,3 +223,17 @@ FormData {
   isComplete: boolean;       // 是否已完成
 }
 ```
+
+### Node.js 示例项目
+
+完整的服务端实现示例，包括文件分片存储、合并、断点续传等功能：
+
+- 示例仓库：[big-file-uploader-demo](https://github.com/Misszhu/big-file-uploader-demo.git)
+- 技术栈：Node.js + Express
+- 功能特性：
+  - ✅ 分片上传接口
+  - ✅ 秒传判断
+  - ✅ 断点续传支持
+  - ✅ 分片合并
+  - ✅ 临时文件管理
+  - ✅ 完整的错误处理
