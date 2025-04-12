@@ -1,13 +1,22 @@
-//TODO: 创建一个用于计算哈希的 Web Worker
+//TODO: 计算哈希用 Web Worker
 import { ChunkInfo } from 'src/types';
 
+/**
+ * 分片管理器
+ * 负责文件分片、哈希计算、分片状态管理等核心功能
+ */
 export default class ChunkManager {
-  private file: File;
-  private chunkSize: number;
-  public chunks: ChunkInfo[];
-  public fileHash: string | null;
-  private hashProgress: number;
+  private file: File;                    // 待上传的文件
+  private chunkSize: number;             // 分片大小（字节）
+  public chunks: ChunkInfo[];            // 分片信息数组
+  public fileHash: string | null;        // 文件哈希值
+  private hashProgress: number;          // 哈希计算进度
 
+  /**
+   * 构造函数
+   * @param file 待上传的文件
+   * @param chunkSize 分片大小，默认5MB
+   */
   constructor(file: File, chunkSize: number = 5 * 1024 * 1024) {
     this.file = file;
     this.chunkSize = chunkSize;
@@ -18,6 +27,11 @@ export default class ChunkManager {
     this._prepareChunks();
   }
 
+  /**
+   * 准备文件分片
+   * 将文件按照指定大小切分成多个分片
+   * @private
+   */
   private _prepareChunks(): void {
     let start = 0;
     let index = 0;
@@ -37,6 +51,12 @@ export default class ChunkManager {
     }
   }
 
+  /**
+   * 计算文件哈希值（SHA-256）
+   * TODO: 迁移到 Web Worker 中执行
+   * @param onProgress 进度回调函数
+   * @returns Promise<string> 文件的哈希值
+   */
   async calculateFileHash(onProgress?: (progress: number) => void): Promise<string> {
     if (this.fileHash) return this.fileHash;
 
@@ -91,18 +111,32 @@ export default class ChunkManager {
     });
   }
 
+  /**
+   * 获取待上传的分片
+   * @param excludeIndices 需要排除的分片索引数组
+   * @returns 待上传的分片数组
+   */
   getPendingChunks(excludeIndices: number[] = []): ChunkInfo[] {
     return this.chunks.filter(chunk =>
       chunk.status === 'pending' && !excludeIndices.includes(chunk.index)
     );
   }
 
+  /**
+   * 获取已完成分片的索引数组
+   * @returns 已完成分片的索引数组
+   */
   getCompletedIndices(): number[] {
     return this.chunks
       .filter(chunk => chunk.status === 'completed')
       .map(chunk => chunk.index);
   }
 
+  /**
+   * 更新分片状态
+   * @param index 分片索引
+   * @param status 新状态
+   */
   updateChunkStatus(index: number, status: ChunkInfo['status']): void {
     const chunk = this.chunks.find(c => c.index === index);
     if (chunk) {
@@ -113,6 +147,11 @@ export default class ChunkManager {
     }
   }
 
+  /**
+   * 重置指定分片的状态
+   * @param indices 需要重置的分片索引数组
+   * @param status 重置后的状态，默认为 'pending'
+   */
   resetChunks(indices: number[], status: ChunkInfo['status'] = 'pending'): void {
     this.chunks
       .filter(chunk => indices.includes(chunk.index))
@@ -122,22 +161,31 @@ export default class ChunkManager {
       });
   }
 
+  /**
+   * 获取需要重试的分片
+   * @param maxRetries 最大重试次数，默认3次
+   * @returns 需要重试的分片数组
+   */
   getChunksToRetry(maxRetries: number = 3): ChunkInfo[] {
     return this.chunks.filter(
       chunk => chunk.status === 'failed' && chunk.retries < maxRetries
     );
   }
 
+  /**
+   * 获取总体上传进度
+   * @returns 上传进度百分比（0-100）
+   */
   getProgress(): number {
     const completed = this.chunks.filter(c => c.status === 'completed').length;
     return Math.round((completed / this.chunks.length) * 100);
   }
 
   /**
-  * 检查指定分片是否已完成上传
-  * @param chunkIndex 分片索引
-  * @returns 分片是否已完成上传
-  */
+   * 检查指定分片是否已完成上传
+   * @param chunkIndex 分片索引
+   * @returns 分片是否已完成上传
+   */
   isChunkCompleted(chunkIndex: number): boolean {
     // 边界检查
     if (chunkIndex < 0 || chunkIndex >= this.chunks.length) {

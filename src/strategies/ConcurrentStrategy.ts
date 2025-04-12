@@ -2,6 +2,10 @@ import { UploadStrategy, ConcurrentStrategyOptions, ChunkInfo, UploadResponse } 
 import ChunkManager from '../core/ChunkManager';
 import NetworkClient from '../core/NetworkClient';
 
+/**
+ * 并发上传策略类
+ * 实现大文件的分片并发上传，支持断点续传、暂停恢复等功能
+ */
 class ConcurrentStrategy implements UploadStrategy {
   private chunkManager: ChunkManager;
   private networkClient: NetworkClient;
@@ -31,6 +35,13 @@ class ConcurrentStrategy implements UploadStrategy {
 
   /**
    * 执行上传流程
+   * 主要步骤：
+   * 1. 计算文件哈希
+   * 2. 初始化上传会话
+   * 3. 检查已上传分片
+   * 4. 上传未完成分片
+   * 5. 合并所有分片
+   * @throws {Error} 当上传被中止时抛出错误
    */
   async execute(): Promise<void> {
     if (this.aborted) {
@@ -63,7 +74,6 @@ class ConcurrentStrategy implements UploadStrategy {
 
         this.uploadId = initResult.uploadId;
       }
-
 
       // 3. 检查已上传的分片
       const progressInfo = await this.checkUploadProgress(this.uploadId);
@@ -104,12 +114,20 @@ class ConcurrentStrategy implements UploadStrategy {
     }
   }
 
+  /**
+   * 暂停上传
+   * 中止当前所有上传请求，保留上传进度
+   */
   pause(): void {
     this.paused = true;
     this.abortController?.abort();
     this.abortController = null;
   }
 
+  /**
+   * 恢复上传
+   * 检查服务器端进度，继续上传未完成的分片
+   */
   resume(): void {
     if (!this.paused) return;
 
@@ -148,6 +166,10 @@ class ConcurrentStrategy implements UploadStrategy {
       .catch(this.options.onError);
   }
 
+  /**
+   * 中止上传
+   * 完全停止上传，清理所有状态
+   */
   abort(): void {
     this.aborted = true;
     this.uploadId = null;
@@ -157,9 +179,10 @@ class ConcurrentStrategy implements UploadStrategy {
     this.cleanup();
   }
 
-
   /**
-   * 带进度回调的文件哈希计算
+   * 计算文件哈希值
+   * 带进度回调，用于显示哈希计算进度（占总进度的20%）
+   * @throws {Error} 当哈希计算失败时抛出错误
    */
   private async calculateFileHashWithProgress(): Promise<void> {
     try {
@@ -185,6 +208,9 @@ class ConcurrentStrategy implements UploadStrategy {
 
   /**
    * 初始化上传会话
+   * 向服务器发送文件信息，获取uploadId
+   * @returns {Promise<UploadResponse>} 上传会话信息
+   * @throws {Error} 当初始化失败时抛出错误
    */
   private async initUploadSession(): Promise<UploadResponse> {
     try {
@@ -202,6 +228,7 @@ class ConcurrentStrategy implements UploadStrategy {
 
   /**
    * 准备上传队列
+   * 筛选出未完成和需要重试的分片
    */
   private prepareUploadQueue(): void {
     // 获取未完成的分片（排除已完成和上传中的分片）
@@ -217,6 +244,8 @@ class ConcurrentStrategy implements UploadStrategy {
 
   /**
    * 处理上传队列
+   * 并发上传多个分片，控制并发数量
+   * @param uploadId 上传会话ID
    */
   private async processUploadQueue(uploadId: string): Promise<void> {
     while (this.shouldContinueProcessing()) {
@@ -241,7 +270,9 @@ class ConcurrentStrategy implements UploadStrategy {
   }
 
   /**
-   * 启动分片上传
+   * 启动单个分片上传
+   * @param chunk 分片信息
+   * @param uploadId 上传会话ID
    */
   private async startChunkUpload(chunk: ChunkInfo, uploadId: string): Promise<void> {
     this.activeConnections++;
@@ -279,80 +310,9 @@ class ConcurrentStrategy implements UploadStrategy {
   }
 
   /**
-   * 完成上传（合并分片）
-   */
-  private async completeUpload(uploadId: string): Promise<any> {
-    // 添加暂停和中止检查
-    if (this.paused || this.aborted) {
-      throw new Error('Upload was paused or aborted');
-    }
-
-    try {
-      return await this.networkClient.mergeChunks({
-        uploadId,
-        fileHash: this.chunkManager.fileHash!,
-        fileName: this.options.file.name,
-        totalChunks: this.chunkManager.chunks.length
-      });
-    } catch (error) {
-      throw new Error(`File merge failed: ${error instanceof Error ? error.message : String(error)}`);
-    }
-  }
-
-  /**
-   * 处理上传错误
-   */
-  private handleUploadError(error: unknown): void {
-    if (this.aborted) return;
-
-    const errorMessage = error instanceof Error ? error.message : 'Unknown upload error';
-    this.options.onError(new Error(errorMessage));
-  }
-
-  /**
-   * 处理分片上传成功
-   */
-  private handleChunkSuccess(chunkIndex: number, response: any): void {
-    this.chunkManager.updateChunkStatus(chunkIndex, 'completed');
-    this.options.onChunkSuccess(chunkIndex, response);
-  }
-
-  /**
-   * 处理分片上传失败
-   */
-  private handleChunkError(chunk: ChunkInfo, error: unknown): void {
-    if (this.aborted) return;
-
-    this.chunkManager.updateChunkStatus(chunk.index, 'failed');
-
-    if (chunk.retries < this.options.maxRetries) {
-      this.retryQueue.push(chunk); // 加入重试队列
-    } else {
-      console.error(`Chunk ${chunk.index} failed after ${this.options.maxRetries} retries`);
-    }
-  }
-
-  private async checkUploadProgress(uploadId: string): Promise<{
-    uploadedChunks: number[];
-    isComplete: boolean;
-  }> {
-    try {
-      const response = await this.networkClient.checkProgress(uploadId);
-      return {
-        uploadedChunks: response.uploadedChunks || [],
-        isComplete: response.isComplete || false
-      };
-    } catch (error) {
-      console.error('检查上传进度失败:', error);
-      return {
-        uploadedChunks: [],
-        isComplete: false
-      };
-    }
-  }
-
-  /**
    * 更新分片上传进度
+   * @param chunkIndex 分片索引
+   * @param chunkProgress 分片上传进度(0-100)
    */
   private updateChunkProgress(chunkIndex: number, chunkProgress: number): void {
     // 安全检查
@@ -390,6 +350,10 @@ class ConcurrentStrategy implements UploadStrategy {
     }
   }
 
+  /**
+   * 更新基础进度
+   * 用于恢复上传时，计算已完成分片的进度
+   */
   private updateBaseProgress(): void {
     try {
       // 1. 如果没有哈希值或没有分片，进度为0
@@ -427,6 +391,7 @@ class ConcurrentStrategy implements UploadStrategy {
 
   /**
    * 更新整体进度
+   * 计算所有分片的总体上传进度
    */
   private updateProgress(): void {
     try {
@@ -457,7 +422,95 @@ class ConcurrentStrategy implements UploadStrategy {
   }
 
   /**
+   * 完成上传（合并分片）
+   * 请求服务器合并所有已上传的分片
+   * @param uploadId 上传会话ID
+   * @throws {Error} 当合并失败时抛出错误
+   */
+  private async completeUpload(uploadId: string): Promise<any> {
+    // 添加暂停和中止检查
+    if (this.paused || this.aborted) {
+      throw new Error('Upload was paused or aborted');
+    }
+
+    try {
+      return await this.networkClient.mergeChunks({
+        uploadId,
+        fileHash: this.chunkManager.fileHash!,
+        fileName: this.options.file.name,
+        totalChunks: this.chunkManager.chunks.length
+      });
+    } catch (error) {
+      throw new Error(`File merge failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /**
+   * 处理上传错误
+   * @param error 错误信息
+   */
+  private handleUploadError(error: unknown): void {
+    if (this.aborted) return;
+
+    const errorMessage = error instanceof Error ? error.message : 'Unknown upload error';
+    this.options.onError(new Error(errorMessage));
+  }
+
+  /**
+   * 处理分片上传成功
+   * @param chunkIndex 分片索引
+   * @param response 服务器响应
+   */
+  private handleChunkSuccess(chunkIndex: number, response: any): void {
+    this.chunkManager.updateChunkStatus(chunkIndex, 'completed');
+    this.options.onChunkSuccess(chunkIndex, response);
+  }
+
+  /**
+   * 处理分片上传失败
+   * 根据重试次数决定是否重试
+   * @param chunk 分片信息
+   * @param error 错误信息
+   */
+  private handleChunkError(chunk: ChunkInfo, error: unknown): void {
+    if (this.aborted) return;
+
+    this.chunkManager.updateChunkStatus(chunk.index, 'failed');
+
+    if (chunk.retries < this.options.maxRetries) {
+      this.retryQueue.push(chunk); // 加入重试队列
+    } else {
+      console.error(`Chunk ${chunk.index} failed after ${this.options.maxRetries} retries`);
+    }
+  }
+
+  /**
+   * 检查上传进度
+   * 获取服务器端已上传的分片信息
+   * @param uploadId 上传会话ID
+   */
+  private async checkUploadProgress(uploadId: string): Promise<{
+    uploadedChunks: number[];
+    isComplete: boolean;
+  }> {
+    try {
+      const response = await this.networkClient.checkProgress(uploadId);
+      return {
+        uploadedChunks: response.uploadedChunks || [],
+        isComplete: response.isComplete || false
+      };
+    } catch (error) {
+      console.error('检查上传进度失败:', error);
+      return {
+        uploadedChunks: [],
+        isComplete: false
+      };
+    }
+  }
+
+  /**
    * 清理资源
+   * 重置内部状态
    */
   private cleanup(): void {
     this.abortController = null;
@@ -465,15 +518,19 @@ class ConcurrentStrategy implements UploadStrategy {
     this.retryQueue = [];
   }
 
+  // 辅助方法注释...
+
   /**
-   * 辅助方法：获取下一个分片
+   * 获取下一个待上传的分片
+   * 优先返回重试队列中的分片
    */
   private getNextChunk(): ChunkInfo | undefined {
     return this.retryQueue.shift() || this.pendingChunks.shift();
   }
 
   /**
-   * 辅助方法：检查是否可以启动新连接
+   * 检查是否可以启动新的上传连接
+   * 基于当前活跃连接数和配置的并发数
    */
   private canStartNewConnection(): boolean {
     return this.activeConnections < this.options.concurrent &&
@@ -481,7 +538,8 @@ class ConcurrentStrategy implements UploadStrategy {
   }
 
   /**
-   * 辅助方法：是否应该继续处理
+   * 检查是否应该继续处理上传队列
+   * 基于暂停状态和剩余分片数量
    */
   private shouldContinueProcessing(): boolean {
     return !this.paused &&
@@ -492,7 +550,8 @@ class ConcurrentStrategy implements UploadStrategy {
   }
 
   /**
-   * 辅助方法：等待活跃连接完成
+   * 等待所有活跃连接完成
+   * 用于确保所有分片上传完成
    */
   private async waitForActiveConnections(): Promise<void> {
     while (this.activeConnections > 0 && !this.aborted) {
@@ -501,7 +560,9 @@ class ConcurrentStrategy implements UploadStrategy {
   }
 
   /**
-   * 辅助方法：延迟
+   * 延迟执行
+   * 用于控制轮询间隔
+   * @param ms 延迟毫秒数
    */
   private delay(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms));

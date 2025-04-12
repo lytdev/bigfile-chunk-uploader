@@ -2,6 +2,10 @@ import ConcurrentStrategy from '../strategies/ConcurrentStrategy';
 import { EndpointConfig, UploadOptions, UploadStrategy } from 'src/types';
 import { DEFAULT_CHUNK_SIZE, DEFAULT_CONCURRENT, DEFAULT_MAX_RETRIES } from 'src/constants';
 
+/**
+ * 大文件上传器
+ * 提供文件分片上传的核心功能，支持暂停、继续、中止等操作
+ */
 class BigFileUploader {
   private file: File;
   private baseURL: string;
@@ -11,12 +15,11 @@ class BigFileUploader {
   private headers: Record<string, string>;
   private withCredentials: boolean;
   private maxRetries: number;
+  private strategy: UploadStrategy | null = null;
   private onProgress: (progress: number) => void;
   private onError: (error: Error) => void;
   private onSuccess: (response: any) => void;
   private onChunkSuccess: (chunkIndex: number, response: any) => void;
-
-  private strategy: UploadStrategy | null = null;
 
   constructor(options: UploadOptions) {
     this.file = options.file;
@@ -34,7 +37,8 @@ class BigFileUploader {
   }
 
   /**
-   * 开始上传
+   * 创建上传策略并执行上传流程
+   * @throws {Error} 上传过程中的错误
    */
   async start(): Promise<void> {
     try {
@@ -78,6 +82,9 @@ class BigFileUploader {
 
   /**
    * 创建上传策略
+   * 目前使用并发上传策略（ConcurrentStrategy）
+   * @private
+   * @returns {UploadStrategy} 上传策略实例
    */
   private createStrategy(): UploadStrategy {
     return new ConcurrentStrategy({

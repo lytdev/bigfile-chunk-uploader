@@ -2,6 +2,10 @@ import axios, { AxiosInstance, AxiosResponse, InternalAxiosRequestConfig } from 
 import { EndpointConfig, ExtendedRequestConfig, NetworkClientOptions, ChunkUploadOptions } from 'src/types';
 import { DEFAULT_ENDPOINTS, DEFAULT_MAX_RETRIES, DEFAULT_TIMEOUT } from 'src/constants';
 
+/**
+ * 网络请求客户端
+ * 封装了文件上传相关的网络请求，支持请求重试、进度回调等功能
+ */
 class NetworkClient {
   private instance: AxiosInstance;
   private endpoints: Required<EndpointConfig>;
@@ -54,13 +58,22 @@ class NetworkClient {
     );
   }
 
+  /**
+  * 获取完整的API端点URL
+  * @param endpoint 端点名称
+  * @returns 完整的API URL
+  * @private
+  */
   private getFullUrl(endpoint: keyof EndpointConfig): string {
     return this.endpoints[endpoint];
   }
 
   /**
- * 判断是否应该重试请求
- */
+   * 判断是否应该重试请求
+   * @param error 错误信息
+   * @returns 是否应该重试
+   * @private
+   */
   private _shouldRetry(error: any): boolean {
     // 请求被取消时不重试
     if (axios.isCancel(error)) {
@@ -79,6 +92,9 @@ class NetworkClient {
 
   /**
    * 延迟执行
+   * @param delay 延迟时间（毫秒）
+   * @returns Promise
+   * @private
    */
   private _wait(delay: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, delay));
@@ -86,6 +102,11 @@ class NetworkClient {
 
   /**
    * 上传分片
+   * @param formData 分片数据
+   * @param options 上传选项
+   * @param options.signal 取消信号
+   * @param options.onChunkProgress 进度回调
+   * @returns 上传响应
    */
   public async uploadChunk(formData: FormData, options: ChunkUploadOptions = {}): Promise<any> {
     const config: ExtendedRequestConfig = {
@@ -107,7 +128,9 @@ class NetworkClient {
   }
 
   /**
-   * 初始化上传
+   * 初始化上传会话
+   * @param data 初始化数据
+   * @returns 初始化响应
    */
   public async initUpload(data: Record<string, any>): Promise<any> {
     return this.instance.post(this.getFullUrl('init'), data, {
@@ -119,6 +142,8 @@ class NetworkClient {
 
   /**
    * 合并分片
+   * @param data 合并请求数据
+   * @returns 合并响应
    */
   public async mergeChunks(data: Record<string, any>): Promise<any> {
     return this.instance.post(this.getFullUrl('merge'), data, {
@@ -130,32 +155,55 @@ class NetworkClient {
 
   /**
    * 检查上传进度
+   * @param uploadId 上传会话ID
+   * @returns 进度信息
    */
   public async checkProgress(uploadId: string): Promise<any> {
-    // TODO 调试 progress 接口
     return this.instance.get(this.getFullUrl('progress'), {
       params: { uploadId }
     });
   }
 
+  /**
+   * 处理请求拦截
+   * @param config 请求配置
+   * @returns 修改后的请求配置
+   * @private
+   */
   private _handleRequest(config: InternalAxiosRequestConfig): InternalAxiosRequestConfig {
     // 可以在这里添加全局请求逻辑，如添加token等
-    // console.log('请求发出:', config.url);
     return config;
   }
 
+  /**
+   * 处理请求错误
+   * @param error 错误信息
+   * @returns Promise.reject
+   * @private
+   */
   private _handleRequestError(error: any): Promise<never> {
     return Promise.reject(error);
   }
 
+  /**
+   * 处理响应数据
+   * @param response Axios响应对象
+   * @returns 处理后的响应数据
+   * @private
+   */
   private _handleResponse(response: AxiosResponse): any {
     return response.data;
   }
 
+  /**
+   * 处理响应错误
+   * @param error 错误信息
+   * @returns Promise.reject 带格式化的错误信息
+   * @private
+   */
   private _handleResponseError(error: any): Promise<never> {
     if (axios.isCancel(error)) {
       // 请求被取消的特殊处理
-
       return Promise.reject(new Error('Request canceled'));
     }
 
@@ -163,6 +211,12 @@ class NetworkClient {
     return Promise.reject(new Error(errorMessage));
   }
 
+  /**
+   * 格式化错误消息
+   * @param error 错误对象
+   * @returns 格式化后的错误消息
+   * @private
+   */
   private _formatErrorMessage(error: any): string {
     if (!error.response) {
       const retryCount = error.config?.retryCount || 0;
