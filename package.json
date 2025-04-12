@@ -14,8 +14,7 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
-    "prepublishOnly": "npm run build && npm run test",
-    "docs": "jsdoc -c jsdoc.json"
+    "prepublishOnly": "npm run build && npm run test"
   },
   "keywords": [],
   "author": "",
