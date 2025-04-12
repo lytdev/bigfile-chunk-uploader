@@ -1,7 +1,7 @@
 {
   "name": "big-file-uploader",
   "version": "1.0.0",
-  "description": "A big file uploader",
+  "description": "支持大文件分片上传的前端组件",
   "main": "dist/index.js",
   "module": "dist/index.esm.js",
   "types": "dist/index.d.ts",
@@ -17,7 +17,12 @@
     "test:coverage": "jest --coverage",
     "prepublishOnly": "npm run build && npm run test"
   },
-  "keywords": [],
+  "keywords": [
+    "upload",
+    "file",
+    "chunk",
+    "typescript"
+  ],
   "author": "",
   "license": "ISC",
   "devDependencies": {
@@ -33,10 +38,15 @@
     "cross-env": "^7.0.3",
     "jest": "^29.7.0",
     "rollup": "^2.79.2",
+    "rollup-plugin-filesize": "^10.0.0",
     "tslib": "^2.8.1",
     "typescript": "^5.8.3"
   },
   "dependencies": {
     "axios": "^1.8.4"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Misszhu/big-file-uploader.git"
   }
 }
