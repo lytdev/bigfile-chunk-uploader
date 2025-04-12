@@ -8,11 +8,13 @@ class ConcurrentStrategy implements UploadStrategy {
   private options: ConcurrentStrategyOptions;
   private lastReportedProgress: number = 0;
   private activeConnections: number = 0;
+  private hashCalculated: boolean = false;
   private paused: boolean = false;
   private aborted: boolean = false;
   private abortController: AbortController | null = null;
   private pendingChunks: ChunkInfo[] = [];
   private retryQueue: ChunkInfo[] = [];
+  private uploadId: string | null = null;
 
   constructor(options: ConcurrentStrategyOptions) {
     this.options = options;
@@ -38,31 +40,40 @@ class ConcurrentStrategy implements UploadStrategy {
     this.abortController = new AbortController();
 
     try {
-      // 1. 计算文件哈希
-      await this.calculateFileHashWithProgress();
-
-      // 2. 初始化上传会话
-      const initResult = await this.initUploadSession();
-
-      // 如果文件已存在，直接返回成功
-      if ('exists' in initResult && initResult.exists) {
-        this.options.onProgress(100);
-        this.options.onSuccess(initResult);
-        return;
+      // 1. 只在首次上传时计算哈希
+      if (!this.hashCalculated) {
+        await this.calculateFileHashWithProgress();
+        this.hashCalculated = true;
       }
 
-      // 检查 uploadId 是否存在
-      if (!initResult.uploadId) {
-        throw new Error('Missing uploadId in server response');
+      // 2. 初始化或获取上传会话
+      if (!this.uploadId) {
+        const initResult = await this.initUploadSession();
+
+        if ('exists' in initResult && initResult.exists) {
+          this.options.onProgress(100);
+          this.options.onSuccess(initResult);
+          return;
+        }
+
+        // 检查 uploadId 是否存在
+        if (!initResult.uploadId) {
+          throw new Error('Missing uploadId in server response');
+        }
+
+        this.uploadId = initResult.uploadId;
       }
+
 
       // 3. 检查已上传的分片
-      const progressInfo = await this.checkUploadProgress(initResult.uploadId);
+      const progressInfo = await this.checkUploadProgress(this.uploadId);
 
       // 如果文件已完整上传
       if (progressInfo.isComplete) {
         this.options.onProgress(100);
-        this.options.onSuccess(initResult);
+        // 调用合并分片接口获取最终结果
+        const result = await this.completeUpload(this.uploadId);
+        this.options.onSuccess(result);
         return;
       }
 
@@ -81,10 +92,10 @@ class ConcurrentStrategy implements UploadStrategy {
       this.prepareUploadQueue();
 
       // 6. 开始并发上传（仅上传未完成的分片）
-      await this.processUploadQueue(initResult.uploadId);
+      await this.processUploadQueue(this.uploadId);
 
       // 7. 合并分片
-      const result = await this.completeUpload(initResult.uploadId);
+      const result = await this.completeUpload(this.uploadId);
       this.options.onSuccess(result);
     } catch (error) {
       this.handleUploadError(error);
@@ -104,13 +115,28 @@ class ConcurrentStrategy implements UploadStrategy {
 
     this.paused = false;
     this.abortController = new AbortController();
-    this.execute().catch(this.options.onError);
+    // 不重新初始化，直接继续上传
+    this.processUploadQueue(this.uploadId!)
+      .then(() => {
+        if (!this.paused && !this.aborted) {
+          return this.completeUpload(this.uploadId!);
+        }
+      })
+      .then(result => {
+        if (result) {
+          this.options.onSuccess(result);
+        }
+      })
+      .catch(this.options.onError);
   }
 
   abort(): void {
     this.aborted = true;
+    this.uploadId = null;
+    this.hashCalculated = false;
     this.abortController?.abort();
     this.abortController = null;
+    this.cleanup();
   }
 
 
