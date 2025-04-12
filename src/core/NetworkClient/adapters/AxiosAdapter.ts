@@ -1,13 +1,9 @@
 import axios, { AxiosInstance, AxiosResponse, InternalAxiosRequestConfig } from 'axios';
+import { ChunkUploadOptions } from 'src/types';
 
 interface AxiosAdapterOptions {
   headers?: Record<string, string>;
   timeout?: number;
-}
-
-interface UploadOptions {
-  signal?: AbortSignal;
-  onProgress?: (progress: number) => void;
 }
 
 interface ApiResponse<T = any> {
@@ -18,10 +14,8 @@ interface ApiResponse<T = any> {
 
 export default class AxiosAdapter {
   private instance: AxiosInstance;
-  private baseURL: string;
 
   constructor(baseURL: string, options: AxiosAdapterOptions = {}) {
-    this.baseURL = baseURL;
     this.instance = axios.create({
       baseURL,
       timeout: options.timeout || 30000,
@@ -45,7 +39,7 @@ export default class AxiosAdapter {
     );
   }
 
-  async uploadChunk(url: string, formData: FormData, options: UploadOptions = {}): Promise<ApiResponse> {
+  async uploadChunk(url: string, formData: FormData, options: ChunkUploadOptions = {}): Promise<ApiResponse> {
     try {
       const response = await this.instance.post(url, formData, {
         headers: {
@@ -53,11 +47,11 @@ export default class AxiosAdapter {
         },
         signal: options.signal,
         onUploadProgress: (progressEvent: any) => {
-          if (options.onProgress && progressEvent.total) {
+          if (options.onChunkProgress && progressEvent.total) {
             const progress = (progressEvent.loaded / progressEvent.total) * 100;
-            options.onProgress(progress);
+            options.onChunkProgress(progress);
           }
-        }
+        },
       });
 
       return {

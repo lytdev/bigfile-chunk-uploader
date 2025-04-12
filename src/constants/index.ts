@@ -14,8 +14,9 @@ export const DEFAULT_TIMEOUT = 30000;
 
 /** 默认 API 端点配置 */
 export const DEFAULT_ENDPOINTS: Required<EndpointConfig> = {
-  init: '/upload/init',
-  chunk: '/upload/chunk',
-  merge: '/upload/merge',
-  verify: '/upload/verify'
+  init: '/api/upload/init',
+  chunk: '/api/upload/chunk',
+  merge: '/api/upload/merge',
+  verify: '/api/upload/verify',
+  progress: '/api/upload/progress',
 } as const;

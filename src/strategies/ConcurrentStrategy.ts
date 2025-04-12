@@ -6,9 +6,10 @@ class ConcurrentStrategy implements UploadStrategy {
   private chunkManager: ChunkManager;
   private networkClient: NetworkClient;
   private options: ConcurrentStrategyOptions;
-  private activeConnections = 0;
-  private paused = false;
-  private aborted = false;
+  private lastReportedProgress: number = 0;
+  private activeConnections: number = 0;
+  private paused: boolean = false;
+  private aborted: boolean = false;
   private abortController: AbortController | null = null;
   private pendingChunks: ChunkInfo[] = [];
   private retryQueue: ChunkInfo[] = [];
@@ -21,7 +22,8 @@ class ConcurrentStrategy implements UploadStrategy {
       endpoints: options.endpoints,
       headers: options.headers,
       timeout: options.timeout,
-      withCredentials: options.withCredentials
+      withCredentials: options.withCredentials,
+      maxRetries: options.maxRetries,
     });
   }
 
@@ -54,18 +56,36 @@ class ConcurrentStrategy implements UploadStrategy {
         throw new Error('Missing uploadId in server response');
       }
 
-      const uploadId = initResult.uploadId;
+      // 3. 检查已上传的分片
+      const progressInfo = await this.checkUploadProgress(initResult.uploadId);
 
-      // 3. 准备上传队列
+      // 如果文件已完整上传
+      if (progressInfo.isComplete) {
+        this.options.onProgress(100);
+        this.options.onSuccess(initResult);
+        return;
+      }
+
+      // 4. 标记已上传的分片为已完成
+      if (progressInfo.uploadedChunks.length > 0) {
+        progressInfo.uploadedChunks.forEach(index => {
+          this.chunkManager.updateChunkStatus(index, 'completed');
+        });
+        // 更新进度时保存最后报告的进度
+        const progress = Math.floor(20 + (progressInfo.uploadedChunks.length / this.chunkManager.chunks.length * 80));
+        this.lastReportedProgress = progress;
+        this.options.onProgress(progress);
+      }
+
+      // 5. 准备上传队列（只包含未完成的分片）
       this.prepareUploadQueue();
 
-      // 4. 开始并发上传
-      await this.processUploadQueue(uploadId);
+      // 6. 开始并发上传（仅上传未完成的分片）
+      await this.processUploadQueue(initResult.uploadId);
 
-      // 5. 合并分片
-      const result = await this.completeUpload(uploadId);
+      // 7. 合并分片
+      const result = await this.completeUpload(initResult.uploadId);
       this.options.onSuccess(result);
-
     } catch (error) {
       this.handleUploadError(error);
     } finally {
@@ -132,7 +152,7 @@ class ConcurrentStrategy implements UploadStrategy {
    * 准备上传队列
    */
   private prepareUploadQueue(): void {
-    // 获取未完成的分片（排除已完成的）
+    // 获取未完成的分片（排除已完成和上传中的分片）
     const completedIndices = this.chunkManager.getCompletedIndices();
     this.pendingChunks = this.chunkManager.getPendingChunks(completedIndices);
 
@@ -140,8 +160,7 @@ class ConcurrentStrategy implements UploadStrategy {
     const chunksToRetry = this.chunkManager.getChunksToRetry(this.options.maxRetries);
     this.pendingChunks.push(...chunksToRetry);
 
-    // 更新进度（初始化后可能有已完成的分片）
-    this.updateProgress();
+    console.log(`准备上传队列: 待上传分片数 ${this.pendingChunks.length}`);
   }
 
   /**
@@ -160,6 +179,11 @@ class ConcurrentStrategy implements UploadStrategy {
       await this.delay(50);
     }
 
+    // 添加暂停检查
+    if (this.paused) {
+      return; // 暂停时直接返回，不执行后续操作
+    }
+
     // 等待所有活跃连接完成
     await this.waitForActiveConnections();
   }
@@ -176,11 +200,11 @@ class ConcurrentStrategy implements UploadStrategy {
 
       const response = await this.networkClient.uploadChunk(formData, {
         signal: this.abortController?.signal,
-        onProgress: (chunkProgress) => {
+        onChunkProgress: (chunkProgress) => {
           this.updateChunkProgress(chunk.index, chunkProgress);
         }
       });
-
+      // 处理分片上传成功
       this.handleChunkSuccess(chunk.index, response);
     } catch (error) {
       this.handleChunkError(chunk, error);
@@ -206,6 +230,11 @@ class ConcurrentStrategy implements UploadStrategy {
    * 完成上传（合并分片）
    */
   private async completeUpload(uploadId: string): Promise<any> {
+    // 添加暂停和中止检查
+    if (this.paused || this.aborted) {
+      throw new Error('Upload was paused or aborted');
+    }
+
     try {
       return await this.networkClient.mergeChunks({
         uploadId,
@@ -251,32 +280,93 @@ class ConcurrentStrategy implements UploadStrategy {
     }
   }
 
+  private async checkUploadProgress(uploadId: string): Promise<{
+    uploadedChunks: number[];
+    isComplete: boolean;
+  }> {
+    try {
+      const response = await this.networkClient.checkProgress(uploadId);
+      return {
+        uploadedChunks: response.uploadedChunks || [],
+        isComplete: response.isComplete || false
+      };
+    } catch (error) {
+      console.error('检查上传进度失败:', error);
+      return {
+        uploadedChunks: [],
+        isComplete: false
+      };
+    }
+  }
+
   /**
    * 更新分片上传进度
    */
   private updateChunkProgress(chunkIndex: number, chunkProgress: number): void {
-    // 计算单个分片对整体进度的影响
-    const chunkWeight = 80 / this.chunkManager.chunks.length; // 上传占总体进度的80%
-    const progressFromChunks = this.chunkManager.getProgress() * chunkWeight;
-    const progressFromThisChunk = chunkProgress * chunkWeight / 100;
-    const overallProgress = 20 + progressFromChunks + progressFromThisChunk; // 哈希计算占20%
+    // 安全检查
+    if (!this.chunkManager.chunks.length) {
+      this.options.onProgress(0);
+      return;
+    }
 
-    this.options.onProgress(Math.min(100, Math.floor(overallProgress)));
+    try {
+      // 1. 获取已完成分片的进度
+      const completedChunks = this.chunkManager.getCompletedIndices().length;
+      const totalChunks = this.chunkManager.chunks.length;
+
+      // 2. 计算基础进度（已完成分片）
+      const baseProgress = (completedChunks / totalChunks) * 80;
+
+      // 3. 计算当前上传分片的贡献
+      const chunkWeight = 80 / totalChunks;
+      const chunkContribution = (chunkProgress / 100) * chunkWeight;
+
+      // 4. 计算总进度
+      const overallProgress = Math.floor(20 + baseProgress + chunkContribution);
+
+      // 5. 确保进度不会倒退
+      const lastProgress = this.lastReportedProgress || 0;
+      const safeProgress = Math.max(lastProgress, Math.min(100, overallProgress));
+
+      // 6. 保存最后报告的进度
+      this.lastReportedProgress = safeProgress;
+
+      this.options.onProgress(safeProgress);
+    } catch (error) {
+      // 出错时不更新进度
+      console.error('Error calculating progress:', error);
+    }
   }
 
   /**
    * 更新整体进度
    */
   private updateProgress(): void {
-    if (!this.chunkManager.fileHash) {
-      // 如果没有哈希值，说明哈希计算失败或未完成，进度应该为0
-      this.options.onProgress(0);
-      return;
-    }
+    try {
+      // 如果没有哈希值或没有分片，进度为0
+      if (!this.chunkManager.fileHash || !this.chunkManager.chunks.length) {
+        this.options.onProgress(0);
+        return;
+      }
 
-    const progressFromChunks = this.chunkManager.getProgress() * 0.8;
-    const overallProgress = 20 + progressFromChunks; // 哈希计算占20%
-    this.options.onProgress(Math.floor(overallProgress));
+      // 直接计算完整进度
+      const completedProgress = this.chunkManager.getProgress();
+      const overallProgress = 20 + (completedProgress * 0.8);
+      const safeProgress = Math.max(0, Math.min(100, Math.floor(overallProgress)));
+
+      if (Number.isNaN(safeProgress)) {
+        console.warn('Progress calculation resulted in NaN', {
+          completedProgress,
+          overallProgress
+        });
+        return;
+      }
+
+      this.options.onProgress(safeProgress);
+    } catch (error) {
+      // 出错时不更新进度
+      console.error('Error calculating progress:', error);
+    }
   }
 
   /**

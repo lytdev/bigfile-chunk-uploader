@@ -26,6 +26,12 @@ export interface EndpointConfig {
    * @default '/upload/verify'
    */
   verify?: string;
+
+  /** 用于检查上传进度
+   * @description 用于检查上传进度
+   * @default '/upload/progress'
+   */
+  progress?: string;
 }
 /** 上传配置选项 */
 export interface UploadOptions {
@@ -192,4 +198,13 @@ export interface ExtendedRequestConfig extends AxiosRequestConfig {
   retryDelay?: number;
   /** 当前重试次数 */
   retryCount?: number;
+}
+
+
+export interface ChunkUploadOptions {
+  /** 单个分片上传进度回调
+   * @param progress 分片上传进度(0-100)
+   */
+  onChunkProgress?: (progress: number) => void;
+  signal?: AbortSignal;
 }

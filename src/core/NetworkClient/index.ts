@@ -1,11 +1,6 @@
 import axios, { AxiosInstance, AxiosResponse, InternalAxiosRequestConfig } from 'axios';
-import { EndpointConfig, ExtendedRequestConfig, NetworkClientOptions } from 'src/types';
+import { EndpointConfig, ExtendedRequestConfig, NetworkClientOptions, ChunkUploadOptions } from 'src/types';
 import { DEFAULT_ENDPOINTS, DEFAULT_MAX_RETRIES, DEFAULT_TIMEOUT } from 'src/constants';
-
-interface UploadOptions {
-  onProgress?: (progressEvent: any) => void;
-  signal?: AbortSignal;
-}
 
 class NetworkClient {
   private instance: AxiosInstance;
@@ -92,12 +87,17 @@ class NetworkClient {
   /**
    * 上传分片
    */
-  public async uploadChunk(formData: FormData, options: UploadOptions = {}): Promise<any> {
+  public async uploadChunk(formData: FormData, options: ChunkUploadOptions = {}): Promise<any> {
     const config: ExtendedRequestConfig = {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
-      onUploadProgress: options.onProgress,
+      onUploadProgress: (progressEvent) => {
+        if (progressEvent.total) {
+          const progress = Math.round((progressEvent.loaded / progressEvent.total) * 100);
+          options.onChunkProgress?.(progress);
+        }
+      },
       signal: options.signal,
       retries: this.maxRetries,
       retryDelay: 1000
@@ -131,9 +131,11 @@ class NetworkClient {
   /**
    * 检查上传进度
    */
-  // TODO checkProgress 调用方
-  public async checkProgress(url: string, params: Record<string, any>): Promise<any> {
-    return this.instance.get(url, { params });
+  public async checkProgress(uploadId: string): Promise<any> {
+    // TODO 调试 progress 接口
+    return this.instance.get(this.getFullUrl('progress'), {
+      params: { uploadId }
+    });
   }
 
   private _handleRequest(config: InternalAxiosRequestConfig): InternalAxiosRequestConfig {

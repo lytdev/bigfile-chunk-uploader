@@ -5,7 +5,7 @@ import { DEFAULT_CHUNK_SIZE, DEFAULT_CONCURRENT, DEFAULT_MAX_RETRIES } from 'src
 class BigFileUploader {
   private file: File;
   private baseURL: string;
-  private endpoints: Required<EndpointConfig>;
+  private endpoints: EndpointConfig
   private chunkSize: number;
   private concurrent: number;
   private headers: Record<string, string>;
@@ -21,19 +21,12 @@ class BigFileUploader {
   constructor(options: UploadOptions) {
     this.file = options.file;
     this.baseURL = options.baseURL;
-    // 初始化端点配置
-    const defaultEndpoints: Required<EndpointConfig> = {
-      init: '/upload/init',
-      chunk: '/upload/chunk',
-      merge: '/upload/merge',
-      verify: '/upload/verify'
-    };
-    this.endpoints = { ...defaultEndpoints, ...options.endpoints };
     this.chunkSize = options.chunkSize || DEFAULT_CHUNK_SIZE; // 默认5MB
     this.concurrent = options.concurrent || DEFAULT_CONCURRENT;
     this.headers = options.headers || {};
     this.withCredentials = options.withCredentials || false;
     this.maxRetries = options.maxRetries || DEFAULT_MAX_RETRIES;
+    this.endpoints = options.endpoints || {};
     this.onProgress = options.onProgress || (() => { });
     this.onError = options.onError || (() => { });
     this.onSuccess = options.onSuccess || (() => { });

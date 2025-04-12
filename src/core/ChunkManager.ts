@@ -43,12 +43,13 @@ export default class ChunkManager {
     return new Promise((resolve) => {
       let currentChunk = 0;
       const fileReader = new FileReader();
+      // 计算分片数量
       const chunks = Math.ceil(this.file.size / this.chunkSize);
       const buffers: ArrayBuffer[] = [];
-
       fileReader.onload = async (e: ProgressEvent<FileReader>) => {
         if (e.target?.result instanceof ArrayBuffer) {
           buffers.push(e.target.result);
+          // 更新进度
           currentChunk++;
           this.hashProgress = Math.round((currentChunk / chunks) * 100);
 
@@ -60,8 +61,10 @@ export default class ChunkManager {
             loadNextChunk();
           } else {
             // 合并所有缓冲区
+            // 计算合并后的缓冲区大小
             const concatenated = new Uint8Array(buffers.reduce((acc, buf) => acc + buf.byteLength, 0));
             let offset = 0;
+            // 将每个缓冲区复制到合并的缓冲区中
             buffers.forEach(buffer => {
               concatenated.set(new Uint8Array(buffer), offset);
               offset += buffer.byteLength;
@@ -80,9 +83,10 @@ export default class ChunkManager {
       const loadNextChunk = () => {
         const start = currentChunk * this.chunkSize;
         const end = Math.min(start + this.chunkSize, this.file.size);
+        // 分片读取文件
         fileReader.readAsArrayBuffer(this.file.slice(start, end));
       };
-
+      // 手动调用第一次读取
       loadNextChunk();
     });
   }
@@ -127,5 +131,19 @@ export default class ChunkManager {
   getProgress(): number {
     const completed = this.chunks.filter(c => c.status === 'completed').length;
     return Math.round((completed / this.chunks.length) * 100);
+  }
+
+  /**
+  * 检查指定分片是否已完成上传
+  * @param chunkIndex 分片索引
+  * @returns 分片是否已完成上传
+  */
+  isChunkCompleted(chunkIndex: number): boolean {
+    // 边界检查
+    if (chunkIndex < 0 || chunkIndex >= this.chunks.length) {
+      return false;
+    }
+
+    return this.chunks[chunkIndex].status === 'completed';
   }
 }
