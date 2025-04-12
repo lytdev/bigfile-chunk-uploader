@@ -1,5 +1,5 @@
 {
-  "name": "big-file-uploader",
+  "name": "big-file-uploader-lib",
   "version": "1.0.0",
   "description": "支持大文件分片上传的前端组件",
   "main": "dist/index.js",
@@ -14,8 +14,7 @@
     "dev": "cross-env NODE_ENV=development rollup -c -w",
     "test": "jest",
     "test:watch": "jest --watch",
-    "test:coverage": "jest --coverage",
-    "prepublishOnly": "npm run build && npm run test"
+    "test:coverage": "jest --coverage"
   },
   "keywords": [
     "upload",
