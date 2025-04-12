@@ -115,12 +115,30 @@ class ConcurrentStrategy implements UploadStrategy {
 
     this.paused = false;
     this.abortController = new AbortController();
-    // 不重新初始化，直接继续上传
-    this.processUploadQueue(this.uploadId!)
-      .then(() => {
-        if (!this.paused && !this.aborted) {
+    // 1. 首先检查上传进度
+    this.checkUploadProgress(this.uploadId!)
+      .then(progressInfo => {
+        // 2. 更新已上传分片状态
+        if (progressInfo.uploadedChunks.length > 0) {
+          progressInfo.uploadedChunks.forEach(index => {
+            this.chunkManager.updateChunkStatus(index, 'completed');
+          });
+          this.updateBaseProgress();
+        }
+
+        // 3. 如果文件已完整上传，直接合并
+        if (progressInfo.isComplete) {
           return this.completeUpload(this.uploadId!);
         }
+
+        // 4. 否则继续上传剩余分片
+        this.prepareUploadQueue();
+        return this.processUploadQueue(this.uploadId!)
+          .then(() => {
+            if (!this.paused && !this.aborted) {
+              return this.completeUpload(this.uploadId!);
+            }
+          });
       })
       .then(result => {
         if (result) {
@@ -361,6 +379,41 @@ class ConcurrentStrategy implements UploadStrategy {
     } catch (error) {
       // 出错时不更新进度
       console.error('Error calculating progress:', error);
+    }
+  }
+
+  private updateBaseProgress(): void {
+    try {
+      // 1. 如果没有哈希值或没有分片，进度为0
+      if (!this.chunkManager.fileHash || !this.chunkManager.chunks.length) {
+        this.options.onProgress(0);
+        return;
+      }
+
+      // 2. 获取已完成分片数
+      const completedChunks = this.chunkManager.getCompletedIndices().length;
+      const totalChunks = this.chunkManager.chunks.length;
+
+      // 3. 计算当前进度
+      // 哈希计算(20%) + 已完成分片进度(80%)
+      const progress = Math.floor(20 + (completedChunks / totalChunks * 80));
+
+      // 4. 确保进度不会倒退
+      const safeProgress = Math.max(this.lastReportedProgress, progress);
+      this.lastReportedProgress = safeProgress;
+
+      // 5. 更新进度
+      this.options.onProgress(safeProgress);
+
+      // 6. 添加日志
+      console.log('更新基础进度:', {
+        completedChunks,
+        totalChunks,
+        progress: safeProgress,
+        hashCalculated: this.hashCalculated
+      });
+    } catch (error) {
+      console.error('更新基础进度失败:', error);
     }
   }
 
