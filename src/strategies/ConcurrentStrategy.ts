@@ -164,10 +164,18 @@ class ConcurrentStrategy implements UploadStrategy {
   private async calculateFileHashWithProgress(): Promise<void> {
     try {
       await this.chunkManager.calculateFileHash((progress) => {
-        // 哈希计算占总体进度的20%
-        const overallProgress = Math.floor(progress * 0.2);
-        this.options.onProgress(overallProgress);
+        // 只在非暂停状态下更新进度
+        if (!this.paused) {
+          const overallProgress = Math.floor(progress * 0.2);
+          // 确保进度不会倒退
+          const safeProgress = Math.max(this.lastReportedProgress, overallProgress);
+          if (safeProgress > this.lastReportedProgress) {
+            this.lastReportedProgress = safeProgress;
+            this.options.onProgress(safeProgress);
+          }
+        }
       });
+      this.hashCalculated = true;
     } catch (error) {
       // 发生错误时重置进度为0
       this.options.onProgress(0);
