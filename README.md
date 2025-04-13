@@ -15,9 +15,9 @@
 ## 安装
 
 ```bash
-npm install big-file-uploader
+npm install big-file-uploader-lib
 # 或者
-yarn add big-file-uploader
+yarn add big-file-uploader-lib
 ```
 
 ## 使用示例
@@ -25,7 +25,7 @@ yarn add big-file-uploader
 ### 基础用法
 
 ```typescript
-import { BigFileUploader } from 'big-file-uploader';
+import { BigFileUploader } from 'big-file-uploader-lib';
 
 const uploader = new BigFileUploader({
   file: File,                   // 待上传的文件
