@@ -163,6 +163,16 @@ uploader.abort();
 
 ## 服务端接口要求
 
+
+**通用响应格式：**
+```typescript
+{
+  code: number;     // 状态码,0表示成功
+  message: string;     // 错误信息
+  result: any        // 结果数据
+}
+```
+
 ### 1. 初始化上传 (`/upload/init`)
 
 **请求参数：**
@@ -175,7 +185,7 @@ uploader.abort();
 }
 ```
 
-**响应格式：**
+**result响应格式：**
 ```typescript
 {
   uploadId: string;     // 上传会话ID
@@ -204,6 +214,21 @@ FormData {
   fileHash: string;     // 文件哈希值
   fileName: string;     // 文件名
   totalChunks: number; // 总分片数
+}
+```
+**result响应格式：**
+```typescript
+{
+  fileName: string;     // 文件名称
+  fileSize: number;     // 文件大小
+  uploadId: string;     // 上传会话标识
+  chunkSize: number;     // 分片大小
+  totalChunkNum: number;     // 分片数量
+  error: string;     // 错误信息
+  success: boolean;     // 是否成功
+  fileUrl: string;     // 文件上传地址
+  startTime: string;     // 文件上传地址
+  endTime: string;     // 文件上传地址
 }
 ```
 

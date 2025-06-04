@@ -1,6 +1,6 @@
 {
   "name": "bigfile-chunk-uploader",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "支持大文件分片上传的前端组件",
   "main": "dist/index.js",
   "module": "dist/index.esm.js",

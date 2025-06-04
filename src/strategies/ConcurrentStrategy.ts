@@ -59,27 +59,27 @@ class ConcurrentStrategy implements UploadStrategy {
 
       // 2. 初始化或获取上传会话
       if (!this.uploadId) {
-        const initResult = await this.initUploadSession();
+        const initResult = await this.initUploadSession()
 
         if ('fileExist' in initResult && initResult.fileExist) {
-          this.options.onProgress(100);
-          this.options.onSuccess(initResult);
-          return;
+          this.options.onProgress(100)
+          this.options.onSuccess(initResult)
+          return
         }
 
         // 检查 uploadId 是否存在
         if (!initResult.uploadId) {
-          throw new Error('Missing uploadId in server response');
+          throw new Error('Missing uploadId in server response')
         }
 
-        this.uploadId = initResult.uploadId;
+        this.uploadId = initResult.uploadId
       }
 
       // 3. 检查已上传的分片
-      const progressInfo = await this.checkUploadProgress(this.uploadId);
+      const progressResult = await this.checkUploadProgress(this.uploadId);
 
       // 如果文件已完整上传
-      if (progressInfo.isComplete) {
+      if (progressResult.isComplete) {
         this.options.onProgress(100);
         // 调用合并分片接口获取最终结果
         const result = await this.completeUpload(this.uploadId);
@@ -88,12 +88,12 @@ class ConcurrentStrategy implements UploadStrategy {
       }
 
       // 4. 标记已上传的分片为已完成
-      if (progressInfo.uploadedChunks.length > 0) {
-        progressInfo.uploadedChunks.forEach(index => {
+      if (progressResult.uploadedChunks.length > 0) {
+        progressResult.uploadedChunks.forEach(index => {
           this.chunkManager.updateChunkStatus(index, 'completed');
         });
         // 更新进度时保存最后报告的进度
-        const progress = Math.floor(20 + (progressInfo.uploadedChunks.length / this.chunkManager.chunks.length * 80));
+        const progress = Math.floor(20 + (progressResult.uploadedChunks.length / this.chunkManager.chunks.length * 80));
         this.lastReportedProgress = progress;
         this.options.onProgress(progress);
       }
@@ -135,17 +135,17 @@ class ConcurrentStrategy implements UploadStrategy {
     this.abortController = new AbortController();
     // 1. 首先检查上传进度
     this.checkUploadProgress(this.uploadId!)
-      .then(progressInfo => {
+      .then(progressResult => {
         // 2. 更新已上传分片状态
-        if (progressInfo.uploadedChunks.length > 0) {
-          progressInfo.uploadedChunks.forEach(index => {
+        if (progressResult.uploadedChunks.length > 0) {
+          progressResult.uploadedChunks.forEach(index => {
             this.chunkManager.updateChunkStatus(index, 'completed');
           });
           this.updateBaseProgress();
         }
 
         // 3. 如果文件已完整上传，直接合并
-        if (progressInfo.isComplete) {
+        if (progressResult.isComplete) {
           return this.completeUpload(this.uploadId!);
         }
 

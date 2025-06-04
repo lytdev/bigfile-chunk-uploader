@@ -94,9 +94,13 @@ export default class AxiosAdapter {
     return Promise.reject(error);
   }
 
-  private _handleResponse(response: AxiosResponse): AxiosResponse {
+  private _handleResponse(response: AxiosResponse): any {
     // 可以在这里添加通用的响应处理逻辑
-    return response;
+    const { data } = response
+    if ('code' in data && Number.parseInt(data.code) !== 0) {
+      throw new Error(data.message);
+    }
+    return data.result;
   }
 
   private _handleResponseError(error: any): Promise<never> {
