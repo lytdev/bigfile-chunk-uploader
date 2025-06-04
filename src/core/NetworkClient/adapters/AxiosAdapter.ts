@@ -1,5 +1,5 @@
 import axios, { AxiosInstance, AxiosResponse, InternalAxiosRequestConfig } from 'axios';
-import { ChunkUploadOptions } from 'src/types';
+import { ChunkUploadOptions, IResultData } from 'src/types';
 
 interface AxiosAdapterOptions {
   headers?: Record<string, string>;
@@ -7,9 +7,9 @@ interface AxiosAdapterOptions {
 }
 
 interface ApiResponse<T = any> {
-  data: T;
-  status: number;
-  statusText: string;
+  data: T
+  status: number
+  statusText: string
 }
 
 export default class AxiosAdapter {
@@ -34,7 +34,9 @@ export default class AxiosAdapter {
 
     // 添加响应拦截器
     this.instance.interceptors.response.use(
-      (response: AxiosResponse) => this._handleResponse(response),
+      (response: AxiosResponse) => {
+       return response
+      },
       (error: any) => this._handleResponseError(error)
     );
   }
@@ -43,46 +45,46 @@ export default class AxiosAdapter {
     try {
       const response = await this.instance.post(url, formData, {
         headers: {
-          'Content-Type': 'multipart/form-data'
+          'Content-Type': 'multipart/form-data',
         },
         signal: options.signal,
         onUploadProgress: (progressEvent: any) => {
           if (options.onChunkProgress && progressEvent.total) {
-            const progress = (progressEvent.loaded / progressEvent.total) * 100;
-            options.onChunkProgress(progress);
+            const progress = (progressEvent.loaded / progressEvent.total) * 100
+            options.onChunkProgress(progress)
           }
         },
-      });
-
+      })
       return {
         data: response.data,
         status: response.status,
-        statusText: response.statusText
-      };
-    } catch (error: any) {
-      if (axios.isCancel(error)) {
-        throw new Error('Request aborted');
+        statusText: response.statusText,
       }
-      throw error;
+    }
+    catch (error: any) {
+      if (axios.isCancel(error)) {
+        throw new Error('Request aborted')
+      }
+      throw error
     }
   }
 
   async get<T>(url: string, params?: Record<string, any>): Promise<ApiResponse<T>> {
-    const response = await this.instance.get(url, { params });
+    const response = await this.instance.get(url, { params })
     return {
       data: response.data,
       status: response.status,
-      statusText: response.statusText
-    };
+      statusText: response.statusText,
+    }
   }
 
   async post<T>(url: string, data: Record<string, any>): Promise<ApiResponse<T>> {
-    const response = await this.instance.post(url, data);
+    const response = await this.instance.post(url, data)
     return {
       data: response.data,
       status: response.status,
-      statusText: response.statusText
-    };
+      statusText: response.statusText,
+    }
   }
 
   private _handleRequest(config: InternalAxiosRequestConfig): InternalAxiosRequestConfig {
@@ -92,15 +94,6 @@ export default class AxiosAdapter {
 
   private _handleRequestError(error: any): Promise<never> {
     return Promise.reject(error);
-  }
-
-  private _handleResponse(response: AxiosResponse): any {
-    // 可以在这里添加通用的响应处理逻辑
-    const { data } = response
-    if ('code' in data && Number.parseInt(data.code) !== 0) {
-      throw new Error(data.message);
-    }
-    return data.result;
   }
 
   private _handleResponseError(error: any): Promise<never> {

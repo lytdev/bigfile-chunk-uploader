@@ -192,7 +192,11 @@ class NetworkClient {
    * @private
    */
   private _handleResponse(response: AxiosResponse): any {
-    return response.data;
+    const { data } = response
+    if (data.code !== 0) {
+      return Promise.reject(new Error(data.message))
+    }
+    return data.result
   }
 
   /**

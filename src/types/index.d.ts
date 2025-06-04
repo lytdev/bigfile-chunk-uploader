@@ -209,4 +209,8 @@ export interface ChunkUploadOptions {
   signal?: AbortSignal;
 }
 
+// 请求响应参数（包含data）
+export interface IResultData<T = any> {
+  result: T
+}
 
