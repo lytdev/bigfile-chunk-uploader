@@ -1,4 +1,4 @@
-# Big File Uploader
+# BigFile Chunk Uploader
 
 一个支持大文件分片上传的前端组件，具备断点续传、暂停恢复等功能。
 
@@ -15,9 +15,9 @@
 ## 安装
 
 ```bash
-npm install big-file-uploader-lib
+npm i bigfile-chunk-uploader
 # 或者
-yarn add big-file-uploader-lib
+yarn add bigfile-chunk-uploader
 ```
 
 ## 使用示例
@@ -25,7 +25,7 @@ yarn add big-file-uploader-lib
 ### 基础用法
 
 ```typescript
-import { BigFileUploader } from 'big-file-uploader-lib';
+import { BigFileUploader } from 'bigfile-chunk-uploader';
 
 const uploader = new BigFileUploader({
   file: File,                   // 待上传的文件

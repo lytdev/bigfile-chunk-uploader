@@ -61,7 +61,7 @@ class ConcurrentStrategy implements UploadStrategy {
       if (!this.uploadId) {
         const initResult = await this.initUploadSession();
 
-        if ('exists' in initResult && initResult.exists) {
+        if ('fileExist' in initResult && initResult.fileExist) {
           this.options.onProgress(100);
           this.options.onSuccess(initResult);
           return;

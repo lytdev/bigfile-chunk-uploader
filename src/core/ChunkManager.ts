@@ -1,5 +1,6 @@
 //TODO: 计算哈希用 Web Worker
 import { ChunkInfo } from 'src/types';
+import { createSHA256, IHasher } from 'hash-wasm';
 
 /**
  * 分片管理器
@@ -51,64 +52,51 @@ export default class ChunkManager {
     }
   }
 
+  // 辅助函数：将File分片读取为ArrayBuffer
+  readFileAsArrayBuffer(fileChunk: any): Promise<ArrayBuffer> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as ArrayBuffer);
+      reader.onerror = reject;
+      reader.readAsArrayBuffer(fileChunk);
+    });
+  }
+
   /**
    * 计算文件哈希值（SHA-256）
    * TODO: 迁移到 Web Worker 中执行
    * @param onProgress 进度回调函数
    * @returns Promise<string> 文件的哈希值
    */
-  async calculateFileHash(onProgress?: (progress: number) => void): Promise<string> {
+  async calculateFileHash(onProgress?: (progress: number) => void) {
     if (this.fileHash) return this.fileHash;
+    // 1. 初始化哈希计算器
+    const hasher: IHasher = await createSHA256();
+    // 2. 分片处理文件
+    const fileSize = this.file.size;
+    let offset = 0;
+    while (offset < fileSize) {
+      // 计算当前分片的结束位置
+      const end = Math.min(offset + this.chunkSize, fileSize);
 
-    return new Promise((resolve) => {
-      let currentChunk = 0;
-      const fileReader = new FileReader();
-      // 计算分片数量
-      const chunks = Math.ceil(this.file.size / this.chunkSize);
-      const buffers: ArrayBuffer[] = [];
-      fileReader.onload = async (e: ProgressEvent<FileReader>) => {
-        if (e.target?.result instanceof ArrayBuffer) {
-          buffers.push(e.target.result);
-          // 更新进度
-          currentChunk++;
-          this.hashProgress = Math.round((currentChunk / chunks) * 100);
+      // 读取文件分片
+      const chunk = this.file.slice(offset, end);
+      const chunkBuffer = await this.readFileAsArrayBuffer(chunk);
 
-          if (onProgress) {
-            onProgress(this.hashProgress);
-          }
+      // 更新哈希计算
+      hasher.update(new Uint8Array(chunkBuffer));
 
-          if (currentChunk < chunks) {
-            loadNextChunk();
-          } else {
-            // 合并所有缓冲区
-            // 计算合并后的缓冲区大小
-            const concatenated = new Uint8Array(buffers.reduce((acc, buf) => acc + buf.byteLength, 0));
-            let offset = 0;
-            // 将每个缓冲区复制到合并的缓冲区中
-            buffers.forEach(buffer => {
-              concatenated.set(new Uint8Array(buffer), offset);
-              offset += buffer.byteLength;
-            });
+      // 更新进度
+      offset = end;
+      if (onProgress) {
+        const progress = Math.floor((offset / fileSize) * 100);
+        this.hashProgress = Math.min(100, progress);
+        onProgress(this.hashProgress);
+      }
+    }
 
-            // 使用 SHA-256 计算哈希
-            const hashBuffer = await crypto.subtle.digest('SHA-256', concatenated);
-            const hashArray = Array.from(new Uint8Array(hashBuffer));
-            this.fileHash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-
-            resolve(this.fileHash);
-          }
-        }
-      };
-
-      const loadNextChunk = () => {
-        const start = currentChunk * this.chunkSize;
-        const end = Math.min(start + this.chunkSize, this.file.size);
-        // 分片读取文件
-        fileReader.readAsArrayBuffer(this.file.slice(start, end));
-      };
-      // 手动调用第一次读取
-      loadNextChunk();
-    });
+    // 3. 获取最终哈希值
+    this.fileHash = hasher.digest('hex');
   }
 
   /**

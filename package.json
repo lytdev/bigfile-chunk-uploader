@@ -1,6 +1,6 @@
 {
-  "name": "big-file-uploader-lib",
-  "version": "1.0.0",
+  "name": "bigfile-chunk-uploader",
+  "version": "1.1.0",
   "description": "支持大文件分片上传的前端组件",
   "main": "dist/index.js",
   "module": "dist/index.esm.js",
@@ -42,10 +42,11 @@
     "typescript": "^5.8.3"
   },
   "dependencies": {
-    "axios": "^1.8.4"
+    "axios": "^1.8.4",
+    "hash-wasm": "^4.12.0"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Misszhu/big-file-uploader.git"
+    "url": "git+https://github.com/lytdev/bigfile-chunk-uploader.git"
   }
 }
