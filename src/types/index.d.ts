@@ -150,6 +150,9 @@ export interface ConcurrentStrategyOptions {
   /** 自定义请求头 */
   headers: Record<string, string>;
 
+  /** 自定义参数 */
+  requestData: Record<string, string>;
+
   /** 是否携带 cookie */
   withCredentials: boolean;
 

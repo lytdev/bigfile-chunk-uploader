@@ -218,7 +218,8 @@ class ConcurrentStrategy implements UploadStrategy {
         fileName: this.options.file.name,
         fileSize: this.options.file.size,
         chunkSize: this.options.chunkSize,
-        fileHash: this.chunkManager.fileHash!
+        fileHash: this.chunkManager.fileHash!,
+        ...this.options.requestData,
       });
 
     } catch (error) {
