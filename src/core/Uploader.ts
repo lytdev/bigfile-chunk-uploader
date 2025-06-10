@@ -13,6 +13,7 @@ class BigFileUploader {
   private chunkSize: number;
   private concurrent: number;
   private headers: Record<string, string>;
+  private requestData: Record<string, string>;
   private withCredentials: boolean;
   private maxRetries: number;
   private strategy: UploadStrategy | null = null;
@@ -27,6 +28,7 @@ class BigFileUploader {
     this.chunkSize = options.chunkSize || DEFAULT_CHUNK_SIZE; // 默认5MB
     this.concurrent = options.concurrent || DEFAULT_CONCURRENT;
     this.headers = options.headers || {};
+    this.requestData = options.requestData || {};
     this.withCredentials = options.withCredentials || false;
     this.maxRetries = options.maxRetries || DEFAULT_MAX_RETRIES;
     this.endpoints = options.endpoints || {};
@@ -99,7 +101,8 @@ class BigFileUploader {
       onProgress: this.onProgress,
       onError: this.onError,
       onSuccess: this.onSuccess,
-      onChunkSuccess: this.onChunkSuccess
+      onChunkSuccess: this.onChunkSuccess,
+      requestData: this.requestData
     });
   }
 }
